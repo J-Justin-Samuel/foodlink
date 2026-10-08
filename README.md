@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FoodLink — Stage 1 (src/ layout)
 
-## Getting Started
+## Folder structure
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+foodlink/
+├── src/
+│   ├── app/
+│   │   ├── onboarding/
+│   │   │   ├── actions.ts                 # Server Actions (role select, operational details)
+│   │   │   ├── page.tsx                    # 2-step wizard
+│   │   │   ├── pending/page.tsx
+│   │   │   └── components/
+│   │   │       ├── role-select-step.tsx
+│   │   │       └── operational-details-step.tsx
+│   │   └── unauthorized/page.tsx
+│   ├── db/
+│   │   ├── schema.ts
+│   │   ├── index.ts
+│   │   ├── seed.ts
+│   │   └── migrations/
+│   │       ├── 0000_enable_postgis.sql
+│   │       └── 0001_foodlink_init.sql
+│   ├── lib/
+│   │   └── rbac.ts
+│   ├── types/
+│   │   ├── roles.ts
+│   │   └── globals.d.ts
+│   └── middleware.ts
+├── drizzle.config.ts        # stays at repo root — points into src/db
+├── tsconfig.json            # @/* → ./src/*
+├── package.json
+└── .env.example
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This matches what `create-next-app --src-dir --import-alias "@/*"` scaffolds. No import paths changed from the previous version — everything already used the `@/...` alias, and that alias now resolves into `src/` instead of the repo root.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`app/`, `middleware.ts` inside `src/`, and `drizzle.config.ts`/`tsconfig.json`/`package.json`/`.env.example` at the repo root is the standard split: routing + server code under `src/`, tooling config at root where each tool expects to find it.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Setup — copy/paste in order
 
-## Learn More
+```bash
+# 1. Scaffold the real Next.js project (this creates node_modules, next.config.js,
+#    app/layout.tsx, globals.css, etc. that aren't part of this zip)
+npx create-next-app@latest foodlink \
+  --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
+cd foodlink
 
-To learn more about Next.js, take a look at the following resources:
+# 2. Unzip this deliverable and overwrite the generated src/, plus drop in the
+#    root-level config files (say yes to overwriting tsconfig.json)
+unzip ~/Downloads/foodlink-stage1-src.zip -d .
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# 3. Install Stage 1 dependencies
+npm install @clerk/nextjs drizzle-orm postgres zod
+npm install -D drizzle-kit tsx
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# 4. Add shadcn/ui + the components the onboarding form imports
+npx shadcn@latest init
+npx shadcn@latest add card button input label
 
-## Deploy on Vercel
+# 5. Start Postgres with PostGIS (Docker)
+docker run --name foodlink-db \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=foodlink \
+  -p 5432:5432 \
+  -d postgis/postgis:16-3.4
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# 6. Environment variables
+cp .env.example .env.local
+# edit .env.local:
+#   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/foodlink"
+#   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=... / CLERK_SECRET_KEY=...  (from dashboard.clerk.com)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# 7. Run migrations — 0000 MUST run before 0001 (enables the postgis extension first)
+docker exec -i foodlink-db psql -U postgres -d foodlink < src/db/migrations/0000_enable_postgis.sql
+docker exec -i foodlink-db psql -U postgres -d foodlink < src/db/migrations/0001_foodlink_init.sql
+
+# 8. Seed mock donor/volunteer/NGO/buyer/admin + one sample donation
+npm run db:seed
+
+# 9. Run it
+npm run dev
+```
+
+Open `http://localhost:3000/onboarding` — that's the flow this stage actually builds toward.
+
+## If step 2's unzip overwrites files you don't want touched
+
+`create-next-app` generates its own `tsconfig.json`, `package.json`, and `src/app/page.tsx` / `layout.tsx` / `globals.css`. Unzipping this on top will:
+
+- **Replace** `tsconfig.json` and `package.json` — intentional, they're pre-configured for this stage (paths alias, scripts).
+- **Not touch** `layout.tsx`, `globals.css`, or the default `page.tsx` — this zip doesn't include them, so your scaffolded versions survive untouched.
+- **Add** everything under `src/app/onboarding`, `src/app/unauthorized`, `src/db`, `src/lib`, `src/types`, `src/middleware.ts` as new files.
+
+If `npm install` complains about package.json being replaced mid-setup, just re-run `npm install` after — it's idempotent.
+
+## Everything else
+
+Same design notes as before (geography custom type via raw SQL, dual RBAC enforcement at middleware + Server Action level, role/status mirrored into Clerk metadata) — see the inline comments in `src/lib/rbac.ts`, `src/middleware.ts`, and `src/app/onboarding/actions.ts`.
+
+Still deferred to later stages: Route Handlers for machine-to-machine traffic (ESP32 ingest, Clerk/Stripe webhooks), admin verification UI, real shadcn component installs.
