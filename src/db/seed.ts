@@ -157,6 +157,10 @@ async function main() {
       ngoId: ngo.id,
       status: "ASSIGNED",
     });
+    // A donation that already has a delivery must not look LISTED to volunteers.
+    await db.execute(
+      sql`UPDATE donations SET status = 'CLAIMED' WHERE id = ${donationId}`,
+    );
     console.log("Inserted 1 sample donation + delivery assignment");
   }
 

@@ -11,8 +11,10 @@ import {
   jsonb,
   customType,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
+import type { DonationItem } from "@/types/donation";
 
 // ---------------------------------------------------------------------------
 // Custom PostGIS geography type
@@ -37,7 +39,7 @@ export const geographyPoint = customType<{
     // for read paths; this fallback keeps the type honest for raw drivers.
     return value as unknown as { lat: number; lng: number };
   },
-}).default(sql`NULL`);
+});
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -74,6 +76,13 @@ export const foodCategoryEnum = pgEnum("food_category", [
   "DAIRY",
   "PACKAGED",
   "OTHER",
+]);
+
+// Stage 2: how the food was prepared — drives safety rules and filtering.
+export const foodClassificationEnum = pgEnum("food_classification", [
+  "COOKED",
+  "PACKAGED",
+  "RAW",
 ]);
 
 export const auctionStatusEnum = pgEnum("auction_status", [
@@ -188,7 +197,14 @@ export const donations = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     title: varchar("title", { length: 255 }).notNull(),
     description: text("description"),
-    category: foodCategoryEnum("category").notNull(),
+    // Stage 1 finer-grained category; now optional (Stage 2 uses `foodClassification`).
+    category: foodCategoryEnum("category"),
+    foodClassification: foodClassificationEnum("food_classification")
+      .notNull()
+      .default("COOKED"),
+    estimatedServings: integer("estimated_servings").notNull().default(1),
+    items: jsonb("items").$type<DonationItem[]>().notNull().default([]),
+    pickupInstructions: text("pickup_instructions"),
     quantityKg: numeric("quantity_kg", { precision: 8, scale: 2 }).notNull(),
     preparedAt: timestamp("prepared_at", { withTimezone: true }),
     shelfLifeExpiresAt: timestamp("shelf_life_expires_at", {
@@ -214,6 +230,10 @@ export const donations = pgTable(
       table.pickupLocation,
     ),
     statusIdx: index("donations_status_idx").on(table.status),
+    statusExpiryIdx: index("donations_status_expiry_idx").on(
+      table.status,
+      table.shelfLifeExpiresAt,
+    ),
     donorIdx: index("donations_donor_idx").on(table.donorId),
   }),
 );
@@ -285,6 +305,11 @@ export const deliveries = pgTable(
   (table) => ({
     volunteerIdx: index("deliveries_volunteer_idx").on(table.volunteerId),
     donationIdx: index("deliveries_donation_idx").on(table.donationId),
+    // Last line of defence for claiming: at most one non-failed delivery per
+    // donation, even if application-level locking were ever bypassed.
+    activeDonationUniq: uniqueIndex("deliveries_active_donation_uniq")
+      .on(table.donationId)
+      .where(sql`${table.status} <> 'FAILED'`),
   }),
 );
 
