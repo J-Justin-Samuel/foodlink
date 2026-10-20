@@ -67,6 +67,15 @@ export const donationStatusEnum = pgEnum("donation_status", [
   "DELIVERED",
   "EXPIRED",
   "CANCELLED",
+  // Stage 3: failed a freshness scan — no longer claimable by volunteers.
+  "DIVERTED",
+]);
+
+// Stage 3: what a batch may be used for after freshness checks.
+export const foodDispositionEnum = pgEnum("food_disposition", [
+  "HUMAN_CONSUMPTION",
+  "COMPOSTING",
+  "ANIMAL_SHELTER",
 ]);
 
 export const foodCategoryEnum = pgEnum("food_category", [
@@ -103,8 +112,8 @@ export const deliveryStatusEnum = pgEnum("delivery_status", [
 
 export const scanVerdictEnum = pgEnum("scan_verdict", [
   "SAFE",
-  "CAUTION",
-  "UNSAFE",
+  "CONSUME_SOON",
+  "SPOILED",
   "INCONCLUSIVE",
 ]);
 
@@ -212,9 +221,15 @@ export const donations = pgTable(
     }).notNull(),
     pickupLocation: geographyPoint("pickup_location").notNull(),
     pickupAddress: text("pickup_address"),
-    pickupOtp: varchar("pickup_otp", { length: 6 }).notNull(),
-    dropoffOtp: varchar("dropoff_otp", { length: 6 }).notNull(),
+    // Legacy (Stage 1): codes now live on `deliveries`. Kept nullable, unused.
+    pickupOtp: varchar("pickup_otp", { length: 6 }),
+    dropoffOtp: varchar("dropoff_otp", { length: 6 }),
     status: donationStatusEnum("status").notNull().default("LISTED"),
+    disposition: foodDispositionEnum("disposition")
+      .notNull()
+      .default("HUMAN_CONSUMPTION"),
+    divertedAt: timestamp("diverted_at", { withTimezone: true }),
+    diversionReason: text("diversion_reason"),
     imageUrls: jsonb("image_urls").$type<string[]>().default([]),
     isBulkAuction: boolean("is_bulk_auction").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -295,6 +310,18 @@ export const deliveries = pgTable(
       withTimezone: true,
     }),
     distanceKm: numeric("distance_km", { precision: 6, scale: 2 }),
+    // Stage 3: two distinct random codes per delivery + brute-force counters.
+    pickupOtp: varchar("pickup_otp", { length: 6 }),
+    dropoffOtp: varchar("dropoff_otp", { length: 6 }),
+    pickupAttempts: integer("pickup_attempts").notNull().default(0),
+    dropoffAttempts: integer("dropoff_attempts").notNull().default(0),
+    otpLockedUntil: timestamp("otp_locked_until", { withTimezone: true }),
+    // Proof of delivery: object key in S3/R2 (never a public URL).
+    handoffPhotoKey: text("handoff_photo_key"),
+    handoffPhotoUploadedAt: timestamp("handoff_photo_uploaded_at", {
+      withTimezone: true,
+    }),
+    failureReason: text("failure_reason"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -303,6 +330,7 @@ export const deliveries = pgTable(
       .defaultNow(),
   },
   (table) => ({
+    ngoIdx: index("deliveries_ngo_idx").on(table.ngoId),
     volunteerIdx: index("deliveries_volunteer_idx").on(table.volunteerId),
     donationIdx: index("deliveries_donation_idx").on(table.donationId),
     // Last line of defence for claiming: at most one non-failed delivery per
@@ -330,7 +358,9 @@ export const foodQualityScans = pgTable(
     surfaceTempC: numeric("surface_temp_c", { precision: 5, scale: 2 }), // MLX90614
     humidityPct: numeric("humidity_pct", { precision: 5, scale: 2 }), // DHT22
     verdict: scanVerdictEnum("verdict").notNull(),
-    rawPayload: jsonb("raw_payload"), // full BLE characteristic payload
+    freshnessScore: integer("freshness_score"), // 0-100, computed server-side
+    source: varchar("source", { length: 20 }).notNull().default("BLUETOOTH"), // BLUETOOTH | SIMULATOR
+    rawPayload: jsonb("raw_payload"), // inputs + score breakdown
     scannedAt: timestamp("scanned_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -434,5 +464,6 @@ export type NewProfile = typeof profiles.$inferInsert;
 export type Donation = typeof donations.$inferSelect;
 export type NewDonation = typeof donations.$inferInsert;
 export type Delivery = typeof deliveries.$inferSelect;
+export type NewDelivery = typeof deliveries.$inferInsert;
 export type FoodQualityScan = typeof foodQualityScans.$inferSelect;
 export type RewardLedgerEntry = typeof rewardLedger.$inferSelect;

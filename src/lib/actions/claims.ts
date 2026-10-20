@@ -11,6 +11,7 @@ import {
   validationFailure,
 } from "@/lib/action-utils";
 import { claimSchema } from "@/lib/validations/donation";
+import { generateOtpPair } from "@/lib/otp";
 import type { ActionErrorCode, ActionResult } from "@/types/action-result";
 
 const MAX_ACTIVE_CLAIMS = 3;
@@ -64,6 +65,12 @@ export async function claimDonation(
 
       if (!donation)
         throw new ClaimError("NOT_FOUND", "This donation no longer exists.");
+      if (donation.status === "DIVERTED") {
+        throw new ClaimError(
+          "CONFLICT",
+          "This batch failed a freshness check and can no longer be claimed.",
+        );
+      }
       if (donation.status !== "LISTED") {
         throw new ClaimError(
           "CONFLICT",
@@ -90,9 +97,32 @@ export async function claimDonation(
         );
       }
 
+      // Stage 3: nearest eligible NGO is pre-selected (the volunteer can change
+      // it before pickup) and two distinct random codes are generated.
+      const nearest = (await tx.execute(sql`
+        SELECT u.id
+        FROM users u
+        JOIN profiles p ON p.user_id = u.id
+        CROSS JOIN donations d
+        WHERE d.id = ${donationId}
+          AND u.role = 'NGO' AND u.is_active
+          AND u.onboarding_status IN ('SUBMITTED', 'VERIFIED')
+          AND p.location IS NOT NULL
+        ORDER BY ST_Distance(p.location, d.pickup_location)
+        LIMIT 1
+      `)) as unknown as { id: string }[];
+      const otps = generateOtpPair();
+
       const [delivery] = await tx
         .insert(deliveries)
-        .values({ donationId, volunteerId: user.id, status: "ASSIGNED" })
+        .values({
+          donationId,
+          volunteerId: user.id,
+          ngoId: nearest[0]?.id ?? null,
+          status: "ASSIGNED",
+          pickupOtp: otps.pickup,
+          dropoffOtp: otps.dropoff,
+        })
         .returning({ id: deliveries.id });
 
       await tx
@@ -104,6 +134,7 @@ export async function claimDonation(
     });
 
     revalidatePath("/volunteer/discover");
+    revalidatePath("/volunteer");
     return { ok: true, data: { deliveryId } };
   } catch (err) {
     if (err instanceof ClaimError) {

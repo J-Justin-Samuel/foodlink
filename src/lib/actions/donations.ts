@@ -1,6 +1,5 @@
 "use server";
 
-import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -15,8 +14,6 @@ const ALLOWED_ONBOARDING = ["SUBMITTED", "VERIFIED"];
 
 const MIN_SHELF_LIFE_MS = 30 * 60 * 1000; // must be claimable for ≥30 min
 const MAX_FUTURE_PREP_MS = 5 * 60 * 1000; // tolerate small clock skew
-
-const otp = () => randomInt(100_000, 1_000_000).toString();
 
 export async function createDonation(
   input: unknown,
@@ -71,14 +68,14 @@ export async function createDonation(
         donor_id, title, food_classification, estimated_servings, quantity_kg,
         items, prepared_at, shelf_life_expires_at,
         pickup_location, pickup_address, pickup_instructions,
-        pickup_otp, dropoff_otp, status
+        status
       ) VALUES (
         ${user.id}, ${d.title}, ${d.classification}, ${d.estimatedServings}, ${d.quantityKg},
         ${JSON.stringify(d.items)}::jsonb, ${preparedAt.toISOString()}::timestamptz,
         ${expiresAt.toISOString()}::timestamptz,
         ST_SetSRID(ST_MakePoint(${d.pickupLng}, ${d.pickupLat}), 4326)::geography,
         ${d.pickupAddress}, ${d.pickupInstructions || null},
-        ${otp()}, ${otp()}, 'LISTED'
+        'LISTED'
       )
       RETURNING id
     `);
@@ -87,6 +84,7 @@ export async function createDonation(
     if (!id) throw new Error("Insert returned no id");
 
     revalidatePath("/volunteer/discover");
+    revalidatePath("/donor");
     return { ok: true, data: { id } };
   } catch (err) {
     return toFailure(err);
