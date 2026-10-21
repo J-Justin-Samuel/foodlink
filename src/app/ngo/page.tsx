@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 import { AutoRefresh } from "@/components/shared/auto-refresh";
 import { OtpForm } from "@/components/shared/otp-form";
 import {
@@ -8,6 +10,7 @@ import { confirmDropoff } from "@/lib/actions/deliveries";
 import { requireDashboardUser } from "@/lib/guards";
 import { getNgoBoard } from "@/lib/queries";
 import { presignView } from "@/lib/storage";
+import { canTrackStatus } from "@/lib/tracking-queries";
 import { CLASSIFICATION_LABELS } from "@/types/donation";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +68,14 @@ export default async function NgoHomePage() {
                 {CLASSIFICATION_LABELS[b.classification]} · {b.servings}{" "}
                 servings
               </p>
+              {canTrackStatus(b.status) && (
+                <Link
+                  href={`/track/${b.id}`}
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  Track live on map
+                </Link>
+              )}
               {b.items.length > 0 && (
                 <ul className="list-inside list-disc text-sm text-muted-foreground">
                   {b.items.map((it, k) => (

@@ -11,6 +11,7 @@ import { confirmPickup } from "@/lib/actions/deliveries";
 import { DISPOSITION_LABELS, type Disposition } from "@/lib/freshness";
 import { requireDashboardUser } from "@/lib/guards";
 import { getDonorBoard } from "@/lib/queries";
+import { canTrackStatus } from "@/lib/tracking-queries";
 import { formatTimeLeft } from "@/lib/urgency";
 import { CLASSIFICATION_LABELS } from "@/types/donation";
 
@@ -94,6 +95,17 @@ export default async function DonorHomePage() {
                   </span>
                   <DeliveryStatus status={b.delivery.status} />
                 </p>
+                {canTrackStatus(b.delivery.status) && (
+                  <Link
+                    href={`/track/${b.delivery.id}`}
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                    })}
+                  >
+                    Track live on map
+                  </Link>
+                )}
                 {b.delivery.status === "ASSIGNED" && (
                   <OtpForm
                     deliveryId={b.delivery.id}

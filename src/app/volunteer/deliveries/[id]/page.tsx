@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { AutoRefresh } from "@/components/shared/auto-refresh";
+import { LiveTracker } from "@/components/shared/live-tracker";
 import { FreshnessScanner } from "@/components/shared/freshness-scanner";
 import {
   DeliveryStatus,
@@ -11,7 +12,9 @@ import { DISPOSITION_LABELS, type Disposition } from "@/lib/freshness";
 import { simulatorAllowed } from "@/lib/flags";
 import { requireDashboardUser } from "@/lib/guards";
 import { getDeliveryRun } from "@/lib/queries";
+import { isRealtimeConfigured } from "@/lib/realtime";
 import { presignView } from "@/lib/storage";
+import { getTrackingSnapshot } from "@/lib/tracking-queries";
 import { formatTimeLeft } from "@/lib/urgency";
 import { CLASSIFICATION_LABELS } from "@/types/donation";
 import { NgoPicker } from "./ngo-picker";
@@ -92,6 +95,7 @@ export default async function DeliveryPage({
   if (!run) notFound();
 
   const photoUrl = await presignView(run.photoKey);
+  const tracking = await getTrackingSnapshot(id, user);
   const { donation: d } = run;
 
   const assigned = run.status === "ASSIGNED";
@@ -200,6 +204,20 @@ export default async function DeliveryPage({
           </ul>
         )}
       </section>
+
+      {active && tracking && (
+        <LiveTracker
+          deliveryId={tracking.deliveryId}
+          status={tracking.status}
+          active={tracking.active}
+          viewer="VOLUNTEER"
+          volunteerName={tracking.volunteerName}
+          pickup={tracking.pickup}
+          dropoff={tracking.dropoff}
+          position={tracking.position}
+          realtime={isRealtimeConfigured()}
+        />
+      )}
 
       {active && (
         <ol className="space-y-3">

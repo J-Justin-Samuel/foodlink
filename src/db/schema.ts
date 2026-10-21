@@ -9,6 +9,8 @@ import {
   integer,
   boolean,
   jsonb,
+  doublePrecision,
+  real,
   customType,
   index,
   uniqueIndex,
@@ -230,6 +232,9 @@ export const donations = pgTable(
       .default("HUMAN_CONSUMPTION"),
     divertedAt: timestamp("diverted_at", { withTimezone: true }),
     diversionReason: text("diversion_reason"),
+    // Stage 4: watchdog bookkeeping.
+    expiryAlertedAt: timestamp("expiry_alerted_at", { withTimezone: true }),
+    expiredAt: timestamp("expired_at", { withTimezone: true }),
     imageUrls: jsonb("image_urls").$type<string[]>().default([]),
     isBulkAuction: boolean("is_bulk_auction").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -322,6 +327,12 @@ export const deliveries = pgTable(
       withTimezone: true,
     }),
     failureReason: text("failure_reason"),
+    // Stage 4: last known volunteer position (live updates travel over Ably).
+    lastLat: doublePrecision("last_lat"),
+    lastLng: doublePrecision("last_lng"),
+    lastHeading: real("last_heading"),
+    lastSpeedMps: real("last_speed_mps"),
+    lastLocationAt: timestamp("last_location_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -367,6 +378,29 @@ export const foodQualityScans = pgTable(
   },
   (table) => ({
     donationIdx: index("scans_donation_idx").on(table.donationId),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// push_subscriptions — Web Push endpoints for volunteer alerts (Stage 4)
+// ---------------------------------------------------------------------------
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: varchar("user_agent", { length: 255 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    userIdx: index("push_subscriptions_user_idx").on(table.userId),
   }),
 );
 
