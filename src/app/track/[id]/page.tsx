@@ -18,7 +18,7 @@ const BACK_LABEL = {
   VOLUNTEER: "← My deliveries",
   NGO: "← Incoming deliveries",
   ADMIN: "← Admin",
-  BUYER: "← Home",
+  BUYER: "← Auctions",
 } as const;
 
 export default async function TrackPage({
@@ -31,6 +31,7 @@ export default async function TrackPage({
     "DONOR",
     "VOLUNTEER",
     "NGO",
+    "BUYER",
     "ADMIN",
   ]);
   if (!UUID.test(id)) notFound();

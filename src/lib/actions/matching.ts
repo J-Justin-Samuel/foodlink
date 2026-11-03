@@ -76,6 +76,12 @@ export async function findNearbyDonations(
         LEFT JOIN profiles p ON p.user_id = d.donor_id
         WHERE d.status = 'LISTED'
           AND d.shelf_life_expires_at > now()
+          -- Stage 5: a batch being auctioned is not free to claim. Once a buyer has paid,
+          -- it becomes a delivery job again (destination: the buyer).
+          AND (d.is_bulk_auction = false OR EXISTS (
+                SELECT 1 FROM food_auctions fa
+                JOIN auction_orders ao ON ao.auction_id = fa.id
+                WHERE fa.donation_id = d.id AND fa.status = 'SOLD' AND ao.status = 'AUTHORIZED'))
           AND ST_DWithin(d.pickup_location, ref.pt, ${radiusKm * 1000}::float8)
           ${classificationFilter}
           ${expiryFilter}

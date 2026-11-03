@@ -274,14 +274,20 @@ export const foodAuctions = pgTable(
       precision: 10,
       scale: 2,
     }).notNull(),
+    // Stage 1 columns, no longer written: the live price is computed on read.
     decayRatePerMinute: numeric("decay_rate_per_minute", {
       precision: 6,
       scale: 4,
-    }).notNull(),
-    currentPrice: numeric("current_price", {
-      precision: 10,
-      scale: 2,
-    }).notNull(),
+    }),
+    currentPrice: numeric("current_price", { precision: 10, scale: 2 }),
+    // Stage 5: price drops by `decrementStep` every `intervalMinutes`, never below `reservePrice`.
+    decrementStep: numeric("decrement_step", { precision: 10, scale: 2 }),
+    intervalMinutes: integer("interval_minutes").notNull().default(15),
+    finalPrice: numeric("final_price", { precision: 10, scale: 2 }),
+    soldAt: timestamp("sold_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    cancelReason: text("cancel_reason"),
+    lastPublishedTier: integer("last_published_tier").notNull().default(0),
     winningBuyerId: uuid("winning_buyer_id").references(() => users.id),
     status: auctionStatusEnum("status").notNull().default("SCHEDULED"),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
@@ -378,6 +384,103 @@ export const foodQualityScans = pgTable(
   },
   (table) => ({
     donationIdx: index("scans_donation_idx").on(table.donationId),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// auction_orders — one purchase attempt (escrow state machine, Stage 5)
+// ---------------------------------------------------------------------------
+export const auctionOrders = pgTable(
+  "auction_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    auctionId: uuid("auction_id")
+      .notNull()
+      .references(() => foodAuctions.id, { onDelete: "cascade" }),
+    buyerId: uuid("buyer_id")
+      .notNull()
+      .references(() => users.id),
+    status: varchar("status", { length: 20 })
+      .notNull()
+      .default("PENDING_PAYMENT"),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("inr"),
+    provider: varchar("provider", { length: 10 }).notNull(),
+    providerRef: text("provider_ref"),
+    reservedUntil: timestamp("reserved_until", { withTimezone: true }),
+    authorizedAt: timestamp("authorized_at", { withTimezone: true }),
+    captureRequestedAt: timestamp("capture_requested_at", {
+      withTimezone: true,
+    }),
+    capturedAt: timestamp("captured_at", { withTimezone: true }),
+    chargeId: text("charge_id"),
+    donorMinor: integer("donor_minor"),
+    volunteerMinor: integer("volunteer_minor"),
+    platformMinor: integer("platform_minor"),
+    donorTransferId: text("donor_transfer_id"),
+    donorTransferredAt: timestamp("donor_transferred_at", {
+      withTimezone: true,
+    }),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+    voidReason: text("void_reason"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    oneLive: uniqueIndex("auction_orders_one_live")
+      .on(table.auctionId)
+      .where(
+        sql`${table.status} IN ('PENDING_PAYMENT','AUTHORIZED','CAPTURE_REQUESTED','CAPTURED')`,
+      ),
+    buyerIdx: index("auction_orders_buyer_idx").on(table.buyerId),
+    statusIdx: index("auction_orders_status_idx").on(table.status),
+  }),
+);
+
+// payout_accounts — a donor's connected payout account (Stripe Connect Express)
+export const payoutAccounts = pgTable("payout_accounts", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  provider: varchar("provider", { length: 10 }).notNull(),
+  providerAccountId: text("provider_account_id").notNull(),
+  detailsSubmitted: boolean("details_submitted").notNull().default(false),
+  payoutsEnabled: boolean("payouts_enabled").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// payout_ledger — where each captured order's money went (75 / 15 / 10)
+export const payoutLedger = pgTable(
+  "payout_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => auctionOrders.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id),
+    kind: varchar("kind", { length: 24 }).notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    status: varchar("status", { length: 12 }).notNull(),
+    providerRef: text("provider_ref"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+  },
+  (table) => ({
+    once: uniqueIndex("payout_ledger_once").on(table.orderId, table.kind),
+    userIdx: index("payout_ledger_user_idx").on(table.userId),
   }),
 );
 
@@ -500,4 +603,6 @@ export type NewDonation = typeof donations.$inferInsert;
 export type Delivery = typeof deliveries.$inferSelect;
 export type NewDelivery = typeof deliveries.$inferInsert;
 export type FoodQualityScan = typeof foodQualityScans.$inferSelect;
+export type FoodAuction = typeof foodAuctions.$inferSelect;
+export type AuctionOrder = typeof auctionOrders.$inferSelect;
 export type RewardLedgerEntry = typeof rewardLedger.$inferSelect;

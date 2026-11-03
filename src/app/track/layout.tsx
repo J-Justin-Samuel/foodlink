@@ -7,7 +7,7 @@ export default function TrackLayout({
   children: React.ReactNode;
 }) {
   return (
-    <DashboardShell roles={["DONOR", "VOLUNTEER", "NGO", "ADMIN"]}>
+    <DashboardShell roles={["DONOR", "VOLUNTEER", "NGO", "BUYER", "ADMIN"]}>
       {children}
     </DashboardShell>
   );

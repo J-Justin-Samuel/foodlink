@@ -56,3 +56,42 @@ export async function createWatchToken(deliveryId: string, clientId: string) {
     }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Stage 5: auction price events. One shared channel for every live auction;
+// the data is not personal, so anyone who may browse auctions can subscribe.
+// ---------------------------------------------------------------------------
+export const AUCTIONS_CHANNEL = "auctions:live";
+
+export interface AuctionEvent {
+  type: "CREATED" | "TIER" | "SOLD" | "CANCELLED" | "EXPIRED";
+  auctionId: string;
+  /** Current price in minor units (what a buyer would pay right now). */
+  priceMinor: number;
+  tier: number;
+  /** ISO time of the next price drop, or null at the floor / when closed. */
+  nextDropAt: string | null;
+  at: string;
+}
+
+/** Best effort: the price is computed from the clock anyway, events just make screens update at once. */
+export async function publishAuctionEvent(
+  event: AuctionEvent,
+): Promise<boolean> {
+  if (!isRealtimeConfigured()) return false;
+  try {
+    await client().channels.get(AUCTIONS_CHANNEL).publish("auction", event);
+    return true;
+  } catch (err) {
+    console.error("Ably auction publish failed:", err);
+    return false;
+  }
+}
+
+export async function createAuctionToken(clientId: string) {
+  return client().auth.createTokenRequest({
+    clientId,
+    ttl: TOKEN_TTL_MS,
+    capability: JSON.stringify({ [AUCTIONS_CHANNEL]: ["subscribe"] }),
+  });
+}

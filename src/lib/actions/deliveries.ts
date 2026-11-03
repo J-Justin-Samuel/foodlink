@@ -1,8 +1,10 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { deliveries, donations, users } from "@/db/schema";
+import { auctionOrders, deliveries, donations, users } from "@/db/schema";
+import { closeAuctionForDonation } from "@/lib/auctions";
+import { settleOrdersForDonation, processVoids } from "@/lib/escrow";
 import { requireRole } from "@/lib/rbac";
 import { toFailure, validationFailure } from "@/lib/action-utils";
 import { otpMatches } from "@/lib/otp";
@@ -189,10 +191,12 @@ export async function confirmDropoff(
   input: unknown,
 ): Promise<ActionResult<{ deliveryId: string }>> {
   try {
-    const user = await requireRole(["NGO"]);
+    // The drop-off code is entered by whoever the food is addressed to: an NGO, or a buyer who won an auction.
+    const user = await requireRole(["NGO", "BUYER"]);
     const parsed = otpEntrySchema.safeParse(input);
     if (!parsed.success) return validationFailure(parsed.error);
     const { deliveryId, code } = parsed.data;
+    let settleDonationId: string | null = null;
 
     const outcome = await db.transaction(async (tx): Promise<Outcome> => {
       const pair = await lockPair(tx, deliveryId);
@@ -200,10 +204,7 @@ export async function confirmDropoff(
       const { donation, delivery } = pair;
 
       if (delivery.ngoId !== user.id)
-        return fail(
-          "FORBIDDEN",
-          "This delivery isn't addressed to your organisation.",
-        );
+        return fail("FORBIDDEN", "This delivery isn't addressed to you.");
       if (delivery.status !== "PICKED_UP") {
         return fail(
           "CONFLICT",
@@ -243,9 +244,31 @@ export async function confirmDropoff(
         .update(donations)
         .set({ status: "DELIVERED", updatedAt: now })
         .where(eq(donations.id, donation.id));
+
+      // Stage 5: a paid auction. Record "capture requested" in THIS transaction; the money
+      // moves right after commit (and a background job retries if the server dies in between).
+      if (donation.isBulkAuction) {
+        const marked = await tx
+          .update(auctionOrders)
+          .set({
+            status: "CAPTURE_REQUESTED",
+            captureRequestedAt: now,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(auctionOrders.status, "AUTHORIZED"),
+              sql`${auctionOrders.auctionId} IN (SELECT id FROM food_auctions WHERE donation_id = ${donation.id})`,
+            ),
+          )
+          .returning({ id: auctionOrders.id });
+        if (marked.length > 0) settleDonationId = donation.id;
+      }
       return { ok: true };
     });
 
+    if (outcome.ok && settleDonationId)
+      await settleOrdersForDonation(settleDonationId);
     return outcome.ok ? { ok: true, data: { deliveryId } } : outcome;
   } catch (err) {
     return toFailure(err);
@@ -374,6 +397,20 @@ export async function setDeliveryNgo(
       return fail("VALIDATION", "That NGO isn't available.");
     }
 
+    // A delivery that belongs to an auction buyer can't be redirected to an NGO.
+    const [current] = await db
+      .select({ buyerRole: users.role })
+      .from(deliveries)
+      .leftJoin(users, eq(users.id, deliveries.ngoId))
+      .where(
+        and(eq(deliveries.id, deliveryId), eq(deliveries.volunteerId, user.id)),
+      );
+    if (current?.buyerRole === "BUYER")
+      return fail(
+        "CONFLICT",
+        "This food was bought in an auction, so it must go to the buyer.",
+      );
+
     const updated = await db
       .update(deliveries)
       .set({ ngoId, updatedAt: new Date() })
@@ -408,6 +445,7 @@ export async function releaseDelivery(
     const parsed = deliveryIdSchema.safeParse(input);
     if (!parsed.success) return validationFailure(parsed.error);
     const { deliveryId } = parsed.data;
+    let releasedHold = false;
 
     const outcome = await db.transaction(async (tx): Promise<Outcome> => {
       const pair = await lockPair(tx, deliveryId);
@@ -444,10 +482,21 @@ export async function releaseDelivery(
               inArray(donations.status, ["CLAIMED"]),
             ),
           );
+        // Stage 5: expired while a buyer's money is on hold -> release it.
+        if (expired) {
+          await closeAuctionForDonation(
+            tx,
+            donation.id,
+            "EXPIRED",
+            "The food expired before it was collected.",
+          );
+          releasedHold = true;
+        }
       }
       return { ok: true };
     });
 
+    if (releasedHold) await processVoids().catch(() => {});
     return outcome.ok ? { ok: true, data: { deliveryId } } : outcome;
   } catch (err) {
     return toFailure(err);

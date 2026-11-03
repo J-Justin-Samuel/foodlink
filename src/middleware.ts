@@ -8,6 +8,11 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/api/webhooks(.*)",
   "/api/inngest(.*)",
+  "/api/realtime(.*)",
+  // Inngest CLI discovery probe paths:
+  "/.redwood/functions/inngest(.*)",
+  "/.netlify/functions/inngest(.*)",
+  "/x/inngest(.*)",
 ]);
 
 /**

@@ -180,7 +180,11 @@ export default async function DeliveryPage({
           </div>
           <div>
             <dt className="text-muted-foreground">Deliver to</dt>
-            <dd className="font-medium">{run.ngoName ?? "Not chosen yet"}</dd>
+            <dd className="font-medium">
+              {run.ngoIsBuyer
+                ? `${run.ngoName ?? "The buyer"} (bought this batch)`
+                : (run.ngoName ?? "Not chosen yet")}
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Safe to eat for</dt>
@@ -241,11 +245,13 @@ export default async function DeliveryPage({
           >
             {assigned && (
               <>
-                <NgoPicker
-                  deliveryId={run.id}
-                  options={run.ngoOptions}
-                  currentId={run.ngoId}
-                />
+                {!run.ngoIsBuyer && (
+                  <NgoPicker
+                    deliveryId={run.id}
+                    options={run.ngoOptions}
+                    currentId={run.ngoId}
+                  />
+                )}
                 <Code value={run.pickupOtp} />
                 {!run.pickupOtp && (
                   <p className="text-sm text-destructive">
@@ -284,7 +290,11 @@ export default async function DeliveryPage({
 
           <Step
             n={4}
-            title="Drop-off: show the NGO your code"
+            title={
+              run.ngoIsBuyer
+                ? "Drop-off: show the buyer your code"
+                : "Drop-off: show the NGO your code"
+            }
             note={
               run.ngoName
                 ? `${run.ngoName} types this code into their dashboard.`

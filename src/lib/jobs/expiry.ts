@@ -1,6 +1,9 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
+import { closeAuctionForDonation } from "@/lib/auctions";
+import { processVoids } from "@/lib/escrow";
+import { publishAuctionEvent, type AuctionEvent } from "@/lib/realtime";
 import {
   normalisePhone,
   sendSms,
@@ -55,6 +58,7 @@ export async function sweepExpiredDonations(
 
   let expiredListed = 0;
   let expiredClaimed = 0;
+  const auctionEvents: AuctionEvent[] = [];
 
   for (const { id } of due) {
     await db.transaction(async (tx) => {
@@ -66,6 +70,14 @@ export async function sweepExpiredDonations(
         await tx.execute(
           sql`UPDATE donations SET status = 'EXPIRED', expired_at = ${nowIso}::timestamptz, updated_at = ${nowIso}::timestamptz WHERE id = ${id}`,
         );
+        // Stage 5: an auction that ran out of time ends too; a buyer's payment hold (if any) is released.
+        const ev = await closeAuctionForDonation(
+          tx,
+          id,
+          "EXPIRED",
+          "The food expired.",
+        );
+        if (ev) auctionEvents.push(ev);
         expiredListed++;
       } else if (status === "CLAIMED") {
         const active = (await tx.execute(sql`
@@ -80,6 +92,13 @@ export async function sweepExpiredDonations(
         await tx.execute(
           sql`UPDATE donations SET status = 'EXPIRED', expired_at = ${nowIso}::timestamptz, updated_at = ${nowIso}::timestamptz WHERE id = ${id}`,
         );
+        const ev = await closeAuctionForDonation(
+          tx,
+          id,
+          "EXPIRED",
+          "The food expired before it was collected.",
+        );
+        if (ev) auctionEvents.push(ev);
         expiredClaimed++;
       }
     });
@@ -91,6 +110,9 @@ export async function sweepExpiredDonations(
     WHERE status IN ('DELIVERED', 'FAILED') AND last_lat IS NOT NULL
     RETURNING id
   `)) as unknown as unknown[];
+
+  for (const ev of auctionEvents) await publishAuctionEvent(ev);
+  if (auctionEvents.length > 0) await processVoids().catch(() => {}); // failures are retried by the escrow job
 
   return { expiredListed, expiredClaimed, scrubbedLocations: scrubbed.length };
 }
@@ -124,6 +146,7 @@ export async function claimExpiringDonations(
     WHERE id IN (
       SELECT id FROM donations
       WHERE status = 'LISTED' AND expiry_alerted_at IS NULL
+        AND is_bulk_auction = false   -- Stage 5: auctioned food isn't offered free (until the charity fallback frees it)
         AND shelf_life_expires_at > ${nowIso}::timestamptz AND shelf_life_expires_at <= ${untilIso}::timestamptz
       ORDER BY shelf_life_expires_at
       LIMIT ${BATCH}

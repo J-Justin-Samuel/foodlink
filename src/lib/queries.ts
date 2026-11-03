@@ -24,6 +24,20 @@ export interface DonorBoardItem {
   disposition: string;
   freshnessScore: number | null;
   freshnessStatus: string | null;
+  quantityKg: number;
+  /** Stage 5: the batch's auction, if it has one. Prices in paise. */
+  auction: null | {
+    id: string;
+    status: string;
+    startMinor: number;
+    floorMinor: number;
+    stepMinor: number;
+    intervalMinutes: number;
+    startsAtMs: number;
+    finalMinor: number | null;
+    orderStatus: string | null;
+    cancelReason: string | null;
+  };
   delivery: null | {
     id: string;
     status: string;
@@ -39,8 +53,12 @@ export async function getDonorBoard(
 ): Promise<DonorBoardItem[]> {
   const r = await rows<Record<string, any>>(sql`
     SELECT d.id, d.title, d.status, d.food_classification, d.estimated_servings,
-           d.shelf_life_expires_at, d.disposition,
+           d.shelf_life_expires_at, d.disposition, d.quantity_kg::float8 AS quantity_kg,
            ls.freshness_score, ls.verdict AS freshness_status,
+           fa.id AS auction_id, fa.status AS auction_status, fa.start_price::float8 AS a_start,
+           fa.reserve_price::float8 AS a_floor, fa.decrement_step::float8 AS a_step,
+           fa.interval_minutes AS a_interval, fa.starts_at AS a_starts_at,
+           fa.final_price::float8 AS a_final, fa.cancel_reason AS a_cancel, ao.status AS order_status,
            dl.id AS delivery_id, dl.status AS delivery_status, dl.otp_locked_until,
            (dl.handoff_photo_key IS NOT NULL) AS has_photo,
            COALESCE(vp.display_name, 'A volunteer') AS volunteer_name,
@@ -50,6 +68,12 @@ export async function getDonorBoard(
       SELECT s.freshness_score, s.verdict FROM food_quality_scans s
       WHERE s.donation_id = d.id ORDER BY s.scanned_at DESC LIMIT 1
     ) ls ON true
+    LEFT JOIN food_auctions fa ON fa.donation_id = d.id
+    LEFT JOIN LATERAL (
+      SELECT o.status FROM auction_orders o
+      WHERE o.auction_id = fa.id AND o.status IN ('PENDING_PAYMENT','AUTHORIZED','CAPTURE_REQUESTED','CAPTURED')
+      ORDER BY o.created_at DESC LIMIT 1
+    ) ao ON true
     LEFT JOIN LATERAL (
       SELECT x.* FROM deliveries x WHERE x.donation_id = d.id
       ORDER BY (x.status <> 'FAILED') DESC, x.created_at DESC LIMIT 1
@@ -70,6 +94,21 @@ export async function getDonorBoard(
     disposition: x.disposition,
     freshnessScore: x.freshness_score,
     freshnessStatus: x.freshness_status,
+    quantityKg: x.quantity_kg,
+    auction: x.auction_id
+      ? {
+          id: x.auction_id,
+          status: x.auction_status,
+          startMinor: Math.round(x.a_start * 100),
+          floorMinor: Math.round(x.a_floor * 100),
+          stepMinor: Math.round((x.a_step ?? 0) * 100),
+          intervalMinutes: x.a_interval,
+          startsAtMs: new Date(x.a_starts_at).getTime(),
+          finalMinor: x.a_final == null ? null : Math.round(x.a_final * 100),
+          orderStatus: x.order_status,
+          cancelReason: x.a_cancel,
+        }
+      : null,
     delivery: x.delivery_id
       ? {
           id: x.delivery_id,
@@ -148,6 +187,8 @@ export interface DeliveryRun {
   photoKey: string | null;
   ngoId: string | null;
   ngoName: string | null;
+  /** Stage 5: the food was bought in an auction, so the destination is the buyer and can't be changed. */
+  ngoIsBuyer: boolean;
   donation: {
     id: string;
     title: string;
@@ -175,6 +216,7 @@ export async function getDeliveryRun(
     SELECT dl.id, dl.status, dl.failure_reason, dl.pickup_otp, dl.dropoff_otp,
            dl.otp_locked_until, dl.handoff_photo_key, dl.ngo_id,
            COALESCE(np.organization_name, np.display_name) AS ngo_name,
+           (nu.role = 'BUYER') AS ngo_is_buyer,
            d.id AS donation_id, d.title, d.status AS donation_status, d.disposition,
            d.food_classification, d.estimated_servings, d.quantity_kg::float8 AS quantity_kg,
            d.items, d.pickup_address, d.pickup_instructions, d.shelf_life_expires_at,
@@ -185,6 +227,7 @@ export async function getDeliveryRun(
     JOIN donations d ON d.id = dl.donation_id
     LEFT JOIN profiles dp ON dp.user_id = d.donor_id
     LEFT JOIN profiles np ON np.user_id = dl.ngo_id
+    LEFT JOIN users nu ON nu.id = dl.ngo_id
     LEFT JOIN LATERAL (
       SELECT s.freshness_score, s.verdict, s.scanned_at FROM food_quality_scans s
       WHERE s.donation_id = d.id ORDER BY s.scanned_at DESC LIMIT 1
@@ -226,6 +269,7 @@ export async function getDeliveryRun(
     photoKey: x.handoff_photo_key,
     ngoId: x.ngo_id,
     ngoName: x.ngo_name,
+    ngoIsBuyer: !!x.ngo_is_buyer,
     donation: {
       id: x.donation_id,
       title: x.title,

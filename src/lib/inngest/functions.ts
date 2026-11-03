@@ -1,4 +1,6 @@
 import { inngest } from "./client";
+import { reconcileEscrow } from "@/lib/escrow";
+import { publishPriceTiers, runCharityFallback } from "@/lib/jobs/auctions";
 import {
   alertVolunteersAbout,
   claimExpiringDonations,
@@ -37,4 +39,37 @@ export const alertExpiringFood = inngest.createFunction(
   },
 );
 
-export const functions = [expireUncollectedFood, alertExpiringFood];
+/** Every minute: wake buyers' screens when an auction's price steps down. */
+export const publishAuctionPrices = inngest.createFunction(
+  { id: "publish-auction-prices", triggers: [{ cron: "* * * * *" }] },
+  async ({ step }) => ({
+    published: await step.run("publish-tiers", () => publishPriceTiers()),
+  }),
+);
+
+/**
+ * Every 5 minutes: an auction already at its floor price with no buyer, inside the last
+ * 30 minutes of the food's life, is cancelled and becomes a free donation for NGO pickup.
+ */
+export const auctionCharityFallback = inngest.createFunction(
+  { id: "auction-charity-fallback", triggers: [{ cron: "*/5 * * * *" }] },
+  async ({ step }) => step.run("fallback", () => runCharityFallback()),
+);
+
+/**
+ * Every 5 minutes: the safety net for money. Expires abandoned checkouts, honours
+ * payments that finished but were never confirmed, releases holds for cancelled auctions,
+ * and finishes any capture / payout that was interrupted.
+ */
+export const reconcileEscrowJob = inngest.createFunction(
+  { id: "reconcile-escrow", triggers: [{ cron: "*/5 * * * *" }] },
+  async ({ step }) => step.run("reconcile", () => reconcileEscrow()),
+);
+
+export const functions = [
+  expireUncollectedFood,
+  alertExpiringFood,
+  publishAuctionPrices,
+  auctionCharityFallback,
+  reconcileEscrowJob,
+];

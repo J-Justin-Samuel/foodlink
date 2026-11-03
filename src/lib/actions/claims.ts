@@ -58,6 +58,7 @@ export async function claimDonation(
           id: donations.id,
           status: donations.status,
           expiresAt: donations.shelfLifeExpiresAt,
+          isBulkAuction: donations.isBulkAuction,
         })
         .from(donations)
         .where(eq(donations.id, donationId))
@@ -79,6 +80,26 @@ export async function claimDonation(
       }
       if (donation.expiresAt.getTime() <= Date.now()) {
         throw new ClaimError("EXPIRED", "This batch has expired.");
+      }
+
+      // Stage 5: auctioned batches. While the auction runs nobody can take the food for free;
+      // after a buyer has paid, the delivery goes to that buyer instead of the nearest NGO.
+      let buyerId: string | null = null;
+      if (donation.isBulkAuction) {
+        const sold = (await tx.execute(sql`
+          SELECT ao.buyer_id
+          FROM food_auctions fa
+          JOIN auction_orders ao ON ao.auction_id = fa.id
+          WHERE fa.donation_id = ${donationId} AND fa.status = 'SOLD' AND ao.status = 'AUTHORIZED'
+          LIMIT 1
+        `)) as unknown as { buyer_id: string }[];
+        if (!sold[0]) {
+          throw new ClaimError(
+            "CONFLICT",
+            "This batch is being sold in an auction and can't be claimed yet.",
+          );
+        }
+        buyerId = sold[0].buyer_id;
       }
 
       const [{ active }] = await tx
@@ -118,7 +139,7 @@ export async function claimDonation(
         .values({
           donationId,
           volunteerId: user.id,
-          ngoId: nearest[0]?.id ?? null,
+          ngoId: buyerId ?? nearest[0]?.id ?? null,
           status: "ASSIGNED",
           pickupOtp: otps.pickup,
           dropoffOtp: otps.dropoff,

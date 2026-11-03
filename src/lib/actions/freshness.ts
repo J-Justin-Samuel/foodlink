@@ -4,6 +4,9 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
 import { deliveries, donations, foodQualityScans } from "@/db/schema";
 import { requireRole } from "@/lib/rbac";
+import { closeAuctionForDonation } from "@/lib/auctions";
+import { processVoids } from "@/lib/escrow";
+import { publishAuctionEvent } from "@/lib/realtime";
 import { toFailure, validationFailure } from "@/lib/action-utils";
 import { simulatorAllowed } from "@/lib/flags";
 import {
@@ -67,6 +70,8 @@ export async function submitFreshnessScan(
     };
     const result = computeFreshness(reading);
 
+    let auctionEvent: Awaited<ReturnType<typeof closeAuctionForDonation>> =
+      null;
     const outcome = await db.transaction(
       async (tx): Promise<ActionFailure | { ok: true; data: ScanOutcome }> => {
         // Lock order everywhere in Stage 3: donation first, then deliveries.
@@ -168,6 +173,13 @@ export async function submitFreshnessScan(
               ),
             );
           diverted = true;
+          // Stage 5: if this batch was being sold, end the auction and release any buyer's payment hold.
+          auctionEvent = await closeAuctionForDonation(
+            tx,
+            donation.id,
+            "CANCELLED",
+            "The food failed a freshness scan.",
+          );
         }
 
         return {
@@ -184,6 +196,10 @@ export async function submitFreshnessScan(
       },
     );
 
+    if (auctionEvent) {
+      await publishAuctionEvent(auctionEvent);
+      await processVoids().catch(() => {}); // a failure here is retried by the escrow job
+    }
     return outcome;
   } catch (err) {
     return toFailure(err);
