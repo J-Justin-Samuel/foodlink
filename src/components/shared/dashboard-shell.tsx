@@ -17,6 +17,15 @@ export async function DashboardShell({
   return (
     <>
       <AppHeader user={user} />
+      {user.onboardingStatus === "SUBMITTED" && user.role !== "ADMIN" && (
+        <p
+          role="status"
+          className="border-b-2 border-amber-500 bg-amber-50 px-4 py-2 text-center text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100"
+        >
+          Your details are being reviewed. You can already look around. Some
+          actions may open up once you are approved.
+        </p>
+      )}
       {children}
     </>
   );

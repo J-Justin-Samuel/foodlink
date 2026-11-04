@@ -27,19 +27,30 @@ export const ROLE_NAV: Record<Role, NavItem[]> = {
   DONOR: [
     { href: "/donor", label: "My donations" },
     { href: "/donor/donations/new", label: "List food" },
+    { href: "/donor/impact", label: "Impact" },
     { href: "/donor/payouts", label: "Payouts" },
+    { href: "/support", label: "Help" },
   ],
   VOLUNTEER: [
     { href: "/volunteer", label: "My deliveries" },
     { href: "/volunteer/discover", label: "Find pickups" },
+    { href: "/volunteer/rewards", label: "Rewards" },
+    { href: "/support", label: "Help" },
   ],
-  NGO: [{ href: "/ngo", label: "Incoming deliveries" }],
+  NGO: [
+    { href: "/ngo", label: "Incoming deliveries" },
+    { href: "/support", label: "Help" },
+  ],
   BUYER: [
     { href: "/buyer", label: "Auctions" },
     { href: "/buyer#purchases", label: "My purchases" },
+    { href: "/support", label: "Help" },
   ],
   ADMIN: [
-    { href: "/admin", label: "Admin" },
+    { href: "/admin", label: "Overview" },
+    { href: "/admin/users", label: "Accounts" },
+    { href: "/admin/disputes", label: "Reports" },
+    { href: "/admin/impact", label: "Impact" },
     { href: "/donor", label: "Donor view" },
     { href: "/volunteer", label: "Volunteer view" },
     { href: "/ngo", label: "NGO view" },

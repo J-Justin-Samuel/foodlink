@@ -1,5 +1,6 @@
 "use server";
 
+import { ngoStatusSql } from "@/lib/verification";
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -127,7 +128,7 @@ export async function claimDonation(
         CROSS JOIN donations d
         WHERE d.id = ${donationId}
           AND u.role = 'NGO' AND u.is_active
-          AND u.onboarding_status IN ('SUBMITTED', 'VERIFIED')
+          AND u.onboarding_status IN (${ngoStatusSql()})
           AND p.location IS NOT NULL
         ORDER BY ST_Distance(p.location, d.pickup_location)
         LIMIT 1

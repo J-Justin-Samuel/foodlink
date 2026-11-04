@@ -124,6 +124,7 @@ export const ledgerReasonEnum = pgEnum("ledger_reason", [
   "DELIVERY_COMPLETED",
   "REFERRAL_BONUS",
   "AUCTION_WIN",
+  "QUALITY_VERIFIED",
   "PENALTY",
   "MANUAL_ADJUSTMENT",
 ]);
@@ -144,6 +145,10 @@ export const users = pgTable(
       .notNull()
       .default("PENDING"),
     isActive: boolean("is_active").notNull().default(true),
+    // Stage 6: admin review trail
+    reviewNote: text("review_note"),
+    reviewedBy: uuid("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -529,6 +534,89 @@ export const rewardLedger = pgTable(
     userIdx: index("reward_ledger_user_idx").on(table.userId),
   }),
 );
+
+// ---------------------------------------------------------------------------
+// Stage 6: certificates, ESG reports, disputes, license audits
+// ---------------------------------------------------------------------------
+export const certificates = pgTable("certificates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  serial: varchar("serial", { length: 20 }).notNull().unique(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  holderName: varchar("holder_name", { length: 255 }).notNull(),
+  deliveriesCount: integer("deliveries_count").notNull(),
+  foodKg: numeric("food_kg", { precision: 12, scale: 2 }).notNull(),
+  meals: integer("meals").notNull(),
+  points: integer("points").notNull(),
+  issuedAt: timestamp("issued_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  hash: varchar("hash", { length: 64 }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
+export const esgReports = pgTable("esg_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  serial: varchar("serial", { length: 20 }).notNull().unique(),
+  donorId: uuid("donor_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  year: integer("year").notNull(),
+  quarter: integer("quarter").notNull(),
+  deliveriesCount: integer("deliveries_count").notNull(),
+  foodKg: numeric("food_kg", { precision: 12, scale: 2 }).notNull(),
+  co2eKg: numeric("co2e_kg", { precision: 14, scale: 2 }).notNull(),
+  waterL: numeric("water_l", { precision: 16, scale: 2 }).notNull(),
+  meals: integer("meals").notNull(),
+  generatedAt: timestamp("generated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  hash: varchar("hash", { length: 64 }).notNull(),
+});
+
+export const disputes = pgTable("disputes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  raisedBy: uuid("raised_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  deliveryId: uuid("delivery_id").references(() => deliveries.id, {
+    onDelete: "set null",
+  }),
+  againstUserId: uuid("against_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  category: varchar("category", { length: 30 }).notNull(),
+  description: text("description").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("OPEN"),
+  resolutionNote: text("resolution_note"),
+  penaltyPoints: integer("penalty_points").notNull().default(0),
+  resolvedBy: uuid("resolved_by").references(() => users.id),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const licenseAudits = pgTable("license_audits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  auditorId: uuid("auditor_id")
+    .notNull()
+    .references(() => users.id),
+  result: varchar("result", { length: 10 }).notNull(),
+  licenseType: varchar("license_type", { length: 50 }),
+  licenseNumber: varchar("license_number", { length: 100 }),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 // ---------------------------------------------------------------------------
 // Relations

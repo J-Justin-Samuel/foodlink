@@ -1,5 +1,8 @@
 "use server";
 
+import { recordPoints, type RewardEntry } from "@/lib/leaderboard";
+import { ngoStatuses } from "@/lib/verification";
+import { awardForDelivery } from "@/lib/rewards";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { auctionOrders, deliveries, donations, users } from "@/db/schema";
@@ -197,6 +200,7 @@ export async function confirmDropoff(
     if (!parsed.success) return validationFailure(parsed.error);
     const { deliveryId, code } = parsed.data;
     let settleDonationId: string | null = null;
+    let rewardEntries: RewardEntry[] = [];
 
     const outcome = await db.transaction(async (tx): Promise<Outcome> => {
       const pair = await lockPair(tx, deliveryId);
@@ -244,6 +248,8 @@ export async function confirmDropoff(
         .update(donations)
         .set({ status: "DELIVERED", updatedAt: now })
         .where(eq(donations.id, donation.id));
+      // Stage 6: the volunteer's points go into the append-only ledger in the same transaction.
+      rewardEntries = await awardForDelivery(tx, delivery.id);
 
       // Stage 5: a paid auction. Record "capture requested" in THIS transaction; the money
       // moves right after commit (and a background job retries if the server dies in between).
@@ -267,6 +273,7 @@ export async function confirmDropoff(
       return { ok: true };
     });
 
+    if (outcome.ok) await recordPoints(rewardEntries);
     if (outcome.ok && settleDonationId)
       await settleOrdersForDonation(settleDonationId);
     return outcome.ok ? { ok: true, data: { deliveryId } } : outcome;
@@ -392,7 +399,7 @@ export async function setDeliveryNgo(
       !ngo ||
       ngo.role !== "NGO" ||
       !ngo.isActive ||
-      !["SUBMITTED", "VERIFIED"].includes(ngo.status)
+      !ngoStatuses().includes(ngo.status)
     ) {
       return fail("VALIDATION", "That NGO isn't available.");
     }

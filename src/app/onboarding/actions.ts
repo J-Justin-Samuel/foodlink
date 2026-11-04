@@ -8,10 +8,15 @@ import { eq, sql } from "drizzle-orm";
 import { ROLES } from "@/types/roles";
 import { revalidatePath } from "next/cache";
 
-const roleSchema = z.enum(ROLES);
+// ADMIN accounts are never self-service: an existing admin promotes someone in the database.
+const SELF_SERVICE_ROLES = ROLES.filter((r) => r !== "ADMIN") as [
+  Exclude<(typeof ROLES)[number], "ADMIN">,
+  ...Exclude<(typeof ROLES)[number], "ADMIN">[],
+];
+const roleSchema = z.enum(SELF_SERVICE_ROLES);
 
 const operationalDetailsSchema = z.object({
-  role: roleSchema,
+  role: z.enum(ROLES),
   organizationName: z.string().min(2).max(255).optional(),
   displayName: z.string().min(2).max(255),
   phone: z.string().min(7).max(20),
@@ -55,6 +60,23 @@ export async function selectRole(role: string): Promise<ActionResult> {
 
   if (!primaryEmail) {
     return { ok: false, error: "No verified email on this account" };
+  }
+
+  // A finished account can't swap its role (that would skip admin review); only new, unfinished or rejected ones can choose.
+  const [existing] = await db
+    .select()
+    .from(users)
+    .where(eq(users.externalAuthId, externalAuthId))
+    .limit(1);
+  if (
+    existing &&
+    !["PENDING", "IN_PROGRESS", "REJECTED"].includes(existing.onboardingStatus)
+  ) {
+    return {
+      ok: false,
+      error:
+        "Your account is already set up. Contact support to change your role.",
+    };
   }
 
   await db
@@ -111,6 +133,14 @@ export async function submitOperationalDetails(
   if (!userRecord) {
     return { ok: false, error: "Complete role selection first" };
   }
+  if (
+    userRecord.role === "ADMIN" ||
+    !["IN_PROGRESS", "REJECTED", "PENDING"].includes(
+      userRecord.onboardingStatus,
+    )
+  ) {
+    return { ok: false, error: "Your account is already set up." };
+  }
 
   const d = parsed.data;
 
@@ -144,7 +174,11 @@ export async function submitOperationalDetails(
 
   await db
     .update(users)
-    .set({ onboardingStatus: "SUBMITTED", updatedAt: new Date() })
+    .set({
+      onboardingStatus: "SUBMITTED",
+      reviewNote: null,
+      updatedAt: new Date(),
+    })
     .where(eq(users.id, userRecord.id));
 
   const client = await clerkClient();

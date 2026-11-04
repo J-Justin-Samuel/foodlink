@@ -1,6 +1,7 @@
 import { inngest } from "./client";
 import { reconcileEscrow } from "@/lib/escrow";
 import { publishPriceTiers, runCharityFallback } from "@/lib/jobs/auctions";
+import { runLeaderboardRebuild, runQuarterlyReports } from "@/lib/jobs/stage6";
 import {
   alertVolunteersAbout,
   claimExpiringDonations,
@@ -66,7 +67,23 @@ export const reconcileEscrowJob = inngest.createFunction(
   async ({ step }) => step.run("reconcile", () => reconcileEscrow()),
 );
 
+/** 1st of Jan/Apr/Jul/Oct, 02:30 UTC (08:00 in India): make last quarter's CSR report for every donor with deliveries. */
+export const quarterlyEsgReports = inngest.createFunction(
+  { id: "quarterly-esg-reports", triggers: [{ cron: "30 2 1 1,4,7,10 *" }] },
+  async ({ step }) => step.run("generate", () => runQuarterlyReports()),
+);
+
+/** Hourly: rebuild the Redis leaderboards from the ledger so they can never drift. */
+export const rebuildLeaderboardsJob = inngest.createFunction(
+  { id: "rebuild-leaderboards", triggers: [{ cron: "7 * * * *" }] },
+  async ({ step }) => ({
+    ranked: await step.run("rebuild", () => runLeaderboardRebuild()),
+  }),
+);
+
 export const functions = [
+  quarterlyEsgReports,
+  rebuildLeaderboardsJob,
   expireUncollectedFood,
   alertExpiringFood,
   publishAuctionPrices,

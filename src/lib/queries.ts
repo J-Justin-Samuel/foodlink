@@ -1,3 +1,4 @@
+import { ngoStatusSql } from "@/lib/verification";
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -245,7 +246,7 @@ export async function getDeliveryRun(
       CROSS JOIN donations d
       WHERE d.id = ${x.donation_id}
         AND u.role = 'NGO' AND u.is_active
-        AND u.onboarding_status IN ('SUBMITTED', 'VERIFIED')
+        AND u.onboarding_status IN (${ngoStatusSql()})
         AND p.location IS NOT NULL
       ORDER BY distance_km
       LIMIT 10
