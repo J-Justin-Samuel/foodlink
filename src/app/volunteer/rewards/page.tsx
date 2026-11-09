@@ -227,7 +227,7 @@ export default async function RewardsPage({
         href="/volunteer"
         className={buttonVariants({ variant: "outline" })}
       >
-        Back to my deliveries
+        Back to volunteer home
       </Link>
     </main>
   );

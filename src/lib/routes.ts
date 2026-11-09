@@ -25,24 +25,25 @@ export interface NavItem {
 /** Top-bar links per role. Every page a role can use is reachable from here. */
 export const ROLE_NAV: Record<Role, NavItem[]> = {
   DONOR: [
-    { href: "/donor", label: "My donations" },
+    { href: "/donor", label: "Home" },
     { href: "/donor/donations/new", label: "List food" },
     { href: "/donor/impact", label: "Impact" },
     { href: "/donor/payouts", label: "Payouts" },
     { href: "/support", label: "Help" },
   ],
   VOLUNTEER: [
-    { href: "/volunteer", label: "My deliveries" },
+    { href: "/volunteer", label: "Home" },
     { href: "/volunteer/discover", label: "Find pickups" },
     { href: "/volunteer/rewards", label: "Rewards" },
     { href: "/support", label: "Help" },
   ],
   NGO: [
-    { href: "/ngo", label: "Incoming deliveries" },
+    { href: "/ngo", label: "Home" },
     { href: "/support", label: "Help" },
   ],
   BUYER: [
-    { href: "/buyer", label: "Auctions" },
+    { href: "/buyer", label: "Home" },
+    { href: "/buyer#auctions", label: "Auctions" },
     { href: "/buyer#purchases", label: "My purchases" },
     { href: "/support", label: "Help" },
   ],

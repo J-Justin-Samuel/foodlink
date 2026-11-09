@@ -63,7 +63,7 @@ export default async function PayoutsPage({
 
       {state !== "OFF" && <PayoutSetupButtons state={state} />}
       <Link href="/donor" className={buttonVariants({ variant: "outline" })}>
-        Back to my donations
+        Back to donor home
       </Link>
     </main>
   );

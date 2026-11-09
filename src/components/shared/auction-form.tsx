@@ -159,7 +159,7 @@ export function AuctionForm({
           {pending ? "Starting…" : "Start auction"}
         </Button>
         <Link href="/donor" className={buttonVariants({ variant: "outline" })}>
-          Back to my donations
+          Back to donor home
         </Link>
       </div>
     </form>

@@ -1,180 +1,92 @@
 import Link from "next/link";
+import { and, eq } from "drizzle-orm";
+import { redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
-import { AutoRefresh } from "@/components/shared/auto-refresh";
-import { LivePrice } from "@/components/shared/live-price";
-import { OtpForm } from "@/components/shared/otp-form";
-import { DeliveryStatus } from "@/components/shared/status-badge";
-import { confirmDropoff } from "@/lib/actions/deliveries";
-import { getBuyerOrders, listLiveAuctions } from "@/lib/auction-queries";
+import { AuctionForm } from "@/components/shared/auction-form";
+import { db } from "@/db";
+import { donations, foodAuctions } from "@/db/schema";
+import { MIN_AUCTION_KG } from "@/lib/auction-price";
 import { requireDashboardUser } from "@/lib/guards";
-import { formatMoney } from "@/lib/money";
-import { paymentCurrency } from "@/lib/payments";
-import { getNgoBoard } from "@/lib/queries";
-import { isRealtimeConfigured } from "@/lib/realtime";
-import { canTrackStatus } from "@/lib/tracking-queries";
-import { formatTimeLeft } from "@/lib/urgency";
-import { CLASSIFICATION_LABELS } from "@/types/donation";
+import { getPayoutState } from "@/lib/payouts";
 
 export const dynamic = "force-dynamic";
 
-export default async function BuyerHomePage() {
-  const user = await requireDashboardUser(["BUYER", "ADMIN"]);
-  const [{ serverNowMs, auctions }, orders, deliveries] = await Promise.all([
-    listLiveAuctions(user.id),
-    getBuyerOrders(user.id),
-    getNgoBoard(user.id),
-  ]);
-  const realtime = isRealtimeConfigured();
-  const currency = paymentCurrency();
-  const byAuctionDelivery = new Map(deliveries.map((d) => [d.id, d]));
-  const waiting = orders.some(
-    (o) => o.status === "AUTHORIZED" || o.status === "CAPTURE_REQUESTED",
+export default async function NewAuctionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ donationId?: string }>;
+}) {
+  const { donationId } = await searchParams;
+  const user = await requireDashboardUser(["DONOR"]);
+  if (!donationId || !/^[0-9a-f-]{36}$/i.test(donationId)) redirect("/donor");
+
+  const [d] = await db
+    .select()
+    .from(donations)
+    .where(and(eq(donations.id, donationId), eq(donations.donorId, user.id)));
+  const back = (
+    <Link href="/donor" className={buttonVariants({ variant: "outline" })}>
+      Back to donor home
+    </Link>
   );
+  const problem = async (): Promise<string | null> => {
+    if (!d) return "We couldn't find that batch.";
+    if (d.status !== "LISTED")
+      return "Only a batch that is still waiting for a volunteer can be auctioned.";
+    if (Number(d.quantityKg) <= MIN_AUCTION_KG)
+      return `Auctions are for batches over ${MIN_AUCTION_KG} kg. This one is ${d.quantityKg} kg.`;
+    if (d.shelfLifeExpiresAt.getTime() <= Date.now())
+      return "This batch has expired.";
+    const [existing] = await db
+      .select({ id: foodAuctions.id })
+      .from(foodAuctions)
+      .where(eq(foodAuctions.donationId, d.id));
+    if (existing) return "This batch already has an auction.";
+    return null;
+  };
+  const why = await problem();
+  const payout = await getPayoutState(user.id);
 
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-10 px-4 py-8">
-      <AutoRefresh everyMs={waiting ? 8000 : 30000} />
-
-      <section className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold">Surplus food auctions</h1>
-          <p className="text-sm text-muted-foreground">
-            Large batches of surplus food, priced to fall every 15 minutes. Buy
-            early for certainty, or wait for a lower price.
+    <main className="mx-auto w-full max-w-xl space-y-5 px-4 py-8">
+      <h1 className="text-2xl font-bold">Sell this batch</h1>
+      {why && (
+        <>
+          <p
+            role="alert"
+            className="rounded-md border-2 border-destructive p-3 text-sm"
+          >
+            {why}
           </p>
-        </div>
-
-        {auctions.length === 0 && (
-          <div className="rounded-lg border-2 border-dashed p-8 text-center text-sm">
-            <p className="font-medium">No auctions are running right now.</p>
-            <p className="mt-1 text-muted-foreground">
-              This page updates by itself when a donor starts one.
-            </p>
-          </div>
-        )}
-
-        <ul className="space-y-4">
-          {auctions.map((a) => (
-            <li key={a.id} className="space-y-3 rounded-lg border p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="font-semibold">{a.title}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {a.donorName ?? "Donor"} · {a.quantityKg} kg · {a.servings}{" "}
-                    servings · {CLASSIFICATION_LABELS[a.classification]}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatTimeLeft(a.expiresAt)}
-                    {a.distanceKm !== null
-                      ? ` · ${a.distanceKm.toFixed(1)} km from you`
-                      : ""}
-                  </p>
-                </div>
-                <LivePrice
-                  auctionId={a.id}
-                  serverNowMs={serverNowMs}
-                  realtime={realtime}
-                  currency={currency}
-                  pricing={{
-                    startMinor: a.startMinor,
-                    floorMinor: a.floorMinor,
-                    stepMinor: a.stepMinor,
-                    intervalMinutes: a.intervalMinutes,
-                    startsAtMs: a.startsAtMs,
-                  }}
-                />
-              </div>
-              <Link
-                href={`/buyer/auctions/${a.id}`}
-                className={buttonVariants({ size: "sm" })}
-              >
-                View and buy
+          {back}
+        </>
+      )}
+      {!why && payout.state !== "READY" && (
+        <>
+          <p className="rounded-md border-2 p-3 text-sm">
+            {payout.state === "OFF"
+              ? "Payments aren't set up on this server yet, so auctions can't start."
+              : "Before you can sell, set up where the money should go."}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {payout.state !== "OFF" && (
+              <Link href="/donor/payouts" className={buttonVariants()}>
+                Set up payouts
               </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section id="purchases" className="scroll-mt-20 space-y-4">
-        <div>
-          <h2 className="text-xl font-bold">My purchases</h2>
-          <p className="text-sm text-muted-foreground">
-            Your card is only held until the food arrives. When the volunteer
-            shows you the drop-off code, enter it here to take the food and pay.
-          </p>
-        </div>
-        {orders.length === 0 && (
-          <p className="rounded-lg border-2 border-dashed p-6 text-center text-sm">
-            You haven&apos;t bought anything yet.
-          </p>
-        )}
-        <ul className="space-y-4">
-          {orders.map((o) => {
-            const run = o.deliveryId
-              ? byAuctionDelivery.get(o.deliveryId)
-              : undefined;
-            const open =
-              run && ["ASSIGNED", "PICKED_UP", "EN_ROUTE"].includes(run.status);
-            return (
-              <li key={o.orderId} className="space-y-3 rounded-lg border p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold">{o.title}</h3>
-                  <span className="text-sm font-medium">
-                    {formatMoney(o.amountMinor, o.currency)}
-                  </span>
-                  {run && <DeliveryStatus status={run.status} />}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {orderLine(o.status, !!run)}
-                </p>
-                {run && canTrackStatus(run.status) && (
-                  <Link
-                    href={`/track/${run.id}`}
-                    className={buttonVariants({
-                      variant: "outline",
-                      size: "sm",
-                    })}
-                  >
-                    Track live on map
-                  </Link>
-                )}
-                {open && run && (
-                  <OtpForm
-                    deliveryId={run.id}
-                    action={confirmDropoff}
-                    label="Drop-off code (from the volunteer)"
-                    submitLabel="Confirm delivery and pay"
-                    disabledReason={
-                      run.status !== "PICKED_UP"
-                        ? "Waiting for the volunteer to collect the food."
-                        : !run.photoKey
-                          ? "Waiting for the volunteer's handoff photo."
-                          : undefined
-                    }
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+            )}
+            {back}
+          </div>
+        </>
+      )}
+      {!why && payout.state === "READY" && d && (
+        <AuctionForm
+          donationId={d.id}
+          title={d.title}
+          quantityKg={Number(d.quantityKg)}
+          expiresAtMs={d.shelfLifeExpiresAt.getTime()}
+          nowMs={Date.now()}
+        />
+      )}
     </main>
   );
-}
-
-function orderLine(status: string, hasDelivery: boolean): string {
-  switch (status) {
-    case "AUTHORIZED":
-      return hasDelivery
-        ? "Card on hold. A volunteer is bringing your food."
-        : "Card on hold. Waiting for a volunteer to pick the food up.";
-    case "CAPTURE_REQUESTED":
-    case "CAPTURED":
-      return "Delivered and paid. Thank you.";
-    case "VOID_REQUESTED":
-    case "CANCELLED":
-      return "This purchase didn't go ahead. The hold on your card is released and you weren't charged.";
-    default:
-      return status;
-  }
 }

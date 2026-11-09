@@ -2,23 +2,27 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { AutoRefresh } from "@/components/shared/auto-refresh";
+import { FoodPhoto } from "@/components/shared/food-photo";
 import { LiveTracker } from "@/components/shared/live-tracker";
 import { DeliveryStatus } from "@/components/shared/status-badge";
 import { requireDashboardUser } from "@/lib/guards";
 import { isRealtimeConfigured } from "@/lib/realtime";
 import { ROLE_HOME } from "@/lib/routes";
 import { getTrackingSnapshot } from "@/lib/tracking-queries";
+import { db } from "@/db";
+import { sql } from "drizzle-orm";
+import { cleanPhotoList } from "@/lib/food-photo-rules";
 
 export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const BACK_LABEL = {
-  DONOR: "← My donations",
-  VOLUNTEER: "← My deliveries",
-  NGO: "← Incoming deliveries",
+  DONOR: "← Donor home",
+  VOLUNTEER: "← Volunteer home",
+  NGO: "← NGO home",
   ADMIN: "← Admin",
-  BUYER: "← Auctions",
+  BUYER: "← Buyer home",
 } as const;
 
 export default async function TrackPage({
@@ -39,6 +43,10 @@ export default async function TrackPage({
   const snap = await getTrackingSnapshot(id, user);
   if (!snap) notFound();
   const realtime = isRealtimeConfigured();
+  const [ph] = (await db.execute(
+    sql`SELECT d.image_urls FROM deliveries x JOIN donations d ON d.id = x.donation_id WHERE x.id = ${id}`,
+  )) as unknown as { image_urls: string[] | null }[];
+  const photo = cleanPhotoList(ph?.image_urls)[0];
 
   return (
     <main className="mx-auto w-full max-w-4xl space-y-5 px-4 py-8">
@@ -62,9 +70,16 @@ export default async function TrackPage({
         )}
       </div>
 
-      <header className="flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-bold">{snap.title}</h1>
-        <DeliveryStatus status={snap.status} />
+      <header className="flex items-center gap-4">
+        <FoodPhoto
+          src={photo}
+          alt={`Photo of ${snap.title}`}
+          className="h-16 w-20 shrink-0"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold">{snap.title}</h1>
+          <DeliveryStatus status={snap.status} />
+        </div>
       </header>
 
       <LiveTracker

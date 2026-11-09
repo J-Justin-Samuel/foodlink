@@ -689,6 +689,34 @@ export type NewProfile = typeof profiles.$inferInsert;
 export type Donation = typeof donations.$inferSelect;
 export type NewDonation = typeof donations.$inferInsert;
 export type Delivery = typeof deliveries.$inferSelect;
+// ---------------------------------------------------------------------------
+// Stage 7: photos of the food, taken by the donor when listing it
+// ---------------------------------------------------------------------------
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
+export const foodPhotos = pgTable(
+  "food_photos",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    uploaderId: uuid("uploader_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    donationId: uuid("donation_id").references(() => donations.id, {
+      onDelete: "cascade",
+    }),
+    contentType: varchar("content_type", { length: 20 }).notNull(),
+    bytes: bytea("bytes").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({ donationIdx: index("food_photos_donation_idx").on(t.donationId) }),
+);
+
 export type NewDelivery = typeof deliveries.$inferInsert;
 export type FoodQualityScan = typeof foodQualityScans.$inferSelect;
 export type FoodAuction = typeof foodAuctions.$inferSelect;

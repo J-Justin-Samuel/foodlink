@@ -1,347 +1,346 @@
-"use client";
-
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import dynamic from "next/dynamic";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { claimDonation } from "@/lib/actions/claims";
-import { findNearbyDonations } from "@/lib/actions/matching";
-import { TIER_META, formatTimeLeft, urgencyTier } from "@/lib/urgency";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { buttonVariants } from "@/components/ui/button";
+import { AutoRefresh } from "@/components/shared/auto-refresh";
+import { FoodPhotoGallery } from "@/components/shared/food-photo";
+import { LiveTracker } from "@/components/shared/live-tracker";
+import { FreshnessScanner } from "@/components/shared/freshness-scanner";
 import {
-  CLASSIFICATION_LABELS,
-  FOOD_CLASSIFICATIONS,
-  type FoodClassification,
-  type NearbyDonation,
-} from "@/types/donation";
+  DeliveryStatus,
+  FreshnessBadge,
+} from "@/components/shared/status-badge";
+import { DISPOSITION_LABELS, type Disposition } from "@/lib/freshness";
+import { simulatorAllowed } from "@/lib/flags";
+import { requireDashboardUser } from "@/lib/guards";
+import { getDeliveryRun } from "@/lib/queries";
+import { isRealtimeConfigured } from "@/lib/realtime";
+import { presignView } from "@/lib/storage";
+import { getTrackingSnapshot } from "@/lib/tracking-queries";
+import { formatTimeLeft } from "@/lib/urgency";
+import { CLASSIFICATION_LABELS } from "@/types/donation";
+import { NgoPicker } from "./ngo-picker";
+import { PhotoUpload } from "./photo-upload";
+import { ReleaseButton } from "./release-button";
 
-// mapbox-gl touches `window`, so it must never render on the server.
-const DiscoveryMap = dynamic(
-  () => import("@/components/shared/discovery-map"),
-  {
-    ssr: false,
-    loading: () => <div className="h-full w-full animate-pulse bg-muted" />,
-  },
-);
+export const dynamic = "force-dynamic";
 
-type Center = { lat: number; lng: number };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const REFRESH_MS = 60_000;
-const selectClass =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
+type StepState = "done" | "current" | "upcoming";
 
-export function DiscoveryView({
-  initialCenter,
+function Step({
+  n,
+  title,
+  note,
+  state,
+  children,
 }: {
-  initialCenter: Center | null;
+  n: number;
+  title: string;
+  note?: string;
+  state: StepState;
+  children?: React.ReactNode;
 }) {
-  const [center, setCenter] = useState<Center | null>(initialCenter);
-  const [radiusKm, setRadiusKm] = useState(10);
-  const [classification, setClassification] = useState<"" | FoodClassification>(
-    "",
-  );
-  const [maxHours, setMaxHours] = useState(0); // 0 = any
-  const [donations, setDonations] = useState<NearbyDonation[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [claimingId, setClaimingId] = useState<string | null>(null);
-  const [locating, setLocating] = useState(false);
-  const [isPending, startTransition] = useTransition();
-  const requestId = useRef(0);
-
-  const load = useCallback(() => {
-    if (!center) return;
-    const id = ++requestId.current;
-    startTransition(async () => {
-      const res = await findNearbyDonations({
-        ...center,
-        radiusKm,
-        classification: classification || undefined,
-        maxHoursUntilExpiry: maxHours || undefined,
-      });
-      if (id !== requestId.current) return; // a newer request superseded this one
-      if (res.ok) {
-        setDonations(res.data);
-        setError(null);
-      } else {
-        setError(res.error);
-      }
-    });
-  }, [center, radiusKm, classification, maxHours]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Poll so claimed/expired batches drop off (real-time push arrives in a later stage).
-  useEffect(() => {
-    const t = setInterval(load, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [load]);
-
-  const handleSelect = useCallback((id: string) => {
-    setSelectedId(id);
-    document
-      .getElementById(`donation-${id}`)
-      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, []);
-
-  function useMyLocation() {
-    if (!("geolocation" in navigator)) {
-      setError("Geolocation isn't supported in this browser.");
-      return;
-    }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocating(false);
-      },
-      () => {
-        setError(
-          "Couldn't read your location. Allow location access and retry.",
-        );
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10_000 },
-    );
-  }
-
-  async function handleClaim(id: string) {
-    setClaimingId(id);
-    setNotice(null);
-    const res = await claimDonation(id);
-    setClaimingId(null);
-
-    if (res.ok) {
-      setDonations((prev) => prev.filter((d) => d.id !== id));
-      setSelectedId(null);
-      setNotice("Claimed! Head to the pickup address before the food expires.");
-      return;
-    }
-    setNotice(res.error);
-    if (["CONFLICT", "EXPIRED", "NOT_FOUND"].includes(res.code)) load();
-  }
-
   return (
-    <div className="grid h-[calc(100vh-4rem)] gap-0 lg:grid-cols-[440px_1fr]">
-      {/* Left: filters + cards */}
-      <div className="flex min-h-0 flex-col border-r">
-        <div className="space-y-3 border-b p-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold">Nearby pickups</h1>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={useMyLocation}
-              disabled={locating}
-            >
-              {locating ? "Locating…" : "Use my location"}
-            </Button>
+    <li
+      className={`rounded-lg border p-4 ${
+        state === "current"
+          ? "border-2 border-foreground"
+          : state === "done"
+            ? "bg-muted/50"
+            : "opacity-60"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className={`flex size-7 shrink-0 items-center justify-center rounded-full border-2 border-foreground text-sm font-bold ${
+            state === "done" ? "bg-foreground text-background" : ""
+          }`}
+        >
+          {state === "done" ? "✓" : n}
+        </span>
+        <div className="min-w-0 flex-1 space-y-3">
+          <div>
+            <h2 className="font-semibold">{title}</h2>
+            {note && <p className="text-sm text-muted-foreground">{note}</p>}
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <Label className="mb-1 block text-xs">
-                Radius: {radiusKm} km
-              </Label>
-              <input
-                type="range"
-                min={1}
-                max={25}
-                value={radiusKm}
-                onChange={(e) => setRadiusKm(Number(e.target.value))}
-                className="w-full"
-              />
-            </div>
-            <div>
-              <Label className="mb-1 block text-xs">Food type</Label>
-              <select
-                className={selectClass}
-                value={classification}
-                onChange={(e) =>
-                  setClassification(e.target.value as "" | FoodClassification)
-                }
-              >
-                <option value="">All types</option>
-                {FOOD_CLASSIFICATIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {CLASSIFICATION_LABELS[c]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label className="mb-1 block text-xs">Expires within</Label>
-              <select
-                className={selectClass}
-                value={maxHours}
-                onChange={(e) => setMaxHours(Number(e.target.value))}
-              >
-                <option value={0}>Any time</option>
-                <option value={2}>2 hours</option>
-                <option value={6}>6 hours</option>
-                <option value={12}>12 hours</option>
-                <option value={24}>24 hours</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {notice && (
-          <p role="status" className="border-b bg-muted px-4 py-2 text-sm">
-            {notice}
-          </p>
-        )}
-        {error && (
-          <p
-            role="alert"
-            className="border-b px-4 py-2 text-sm text-destructive"
-          >
-            {error}
-          </p>
-        )}
-
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {!center && (
-            <p className="text-sm text-muted-foreground">
-              We don&apos;t have a base location for you yet. Tap “Use my
-              location” to see pickups around you.
-            </p>
-          )}
-          {center && donations.length === 0 && !isPending && (
-            <p className="text-sm text-muted-foreground">
-              No active donations match these filters. Try a larger radius.
-            </p>
-          )}
-
-          {donations.map((d, i) => (
-            <DonationCard
-              key={d.id}
-              rank={i + 1}
-              donation={d}
-              selected={d.id === selectedId}
-              claiming={claimingId === d.id}
-              onSelect={() => handleSelect(d.id)}
-              onClaim={() => handleClaim(d.id)}
-            />
-          ))}
+          {state !== "upcoming" && children}
         </div>
       </div>
-
-      {/* Right: map */}
-      <div className="h-[60vh] lg:h-full">
-        {center ? (
-          <DiscoveryMap
-            center={center}
-            donations={donations}
-            selectedId={selectedId}
-            onSelect={handleSelect}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center bg-muted text-sm text-muted-foreground">
-            Share your location to load the map.
-          </div>
-        )}
-      </div>
-    </div>
+    </li>
   );
 }
 
-function DonationCard({
-  rank,
-  donation: d,
-  selected,
-  claiming,
-  onSelect,
-  onClaim,
+function Code({ value }: { value: string | null }) {
+  return (
+    <p
+      className="inline-block rounded-md border-2 border-foreground px-4 py-2 font-mono text-3xl font-black tracking-[0.35em]"
+      aria-label={value ? `Code ${value.split("").join(" ")}` : "No code"}
+    >
+      {value ?? "——————"}
+    </p>
+  );
+}
+
+export default async function DeliveryPage({
+  params,
 }: {
-  rank: number;
-  donation: NearbyDonation;
-  selected: boolean;
-  claiming: boolean;
-  onSelect: () => void;
-  onClaim: () => void;
+  params: Promise<{ id: string }>;
 }) {
-  const tier = urgencyTier(d.urgencyScore);
-  const meta = TIER_META[tier];
+  const { id } = await params;
+  const user = await requireDashboardUser(["VOLUNTEER", "ADMIN"]);
+  if (!UUID.test(id)) notFound();
+
+  const run = await getDeliveryRun(id, user.id);
+  if (!run) notFound();
+
+  const photoUrl = await presignView(run.photoKey);
+  const tracking = await getTrackingSnapshot(id, user);
+  const { donation: d } = run;
+
+  const assigned = run.status === "ASSIGNED";
+  const onTheWay = run.status === "PICKED_UP" || run.status === "EN_ROUTE";
+  const delivered = run.status === "DELIVERED";
+  const failed = run.status === "FAILED";
+  const active = assigned || onTheWay;
+  const locked =
+    !!run.lockedUntil && new Date(run.lockedUntil).getTime() > Date.now();
+
+  const banner = failed
+    ? d.status === "DIVERTED"
+      ? "This batch failed a freshness check, so the delivery was cancelled."
+      : (run.failureReason ?? "This delivery was cancelled.")
+    : delivered
+      ? "Delivered. Thank you."
+      : assigned
+        ? "Next: go to the pickup address and show the donor your pickup code."
+        : run.hasPhoto
+          ? "Next: give the NGO your drop-off code so they can confirm."
+          : "Next: at the NGO, take a handoff photo.";
 
   return (
-    <div
-      id={`donation-${d.id}`}
-      onClick={onSelect}
-      className={`cursor-pointer rounded-lg border p-3 transition-colors ${
-        selected
-          ? "border-primary ring-1 ring-primary"
-          : "hover:border-foreground/30"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
-            style={{ background: meta.hex }}
-          >
-            {rank}
-          </span>
-          <h2 className="font-medium leading-tight">{d.title}</h2>
-        </div>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badgeClass}`}
+    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8">
+      {active && <AutoRefresh everyMs={5000} />}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          href="/volunteer"
+          className={buttonVariants({ variant: "ghost", size: "sm" })}
         >
-          {meta.label}
-        </span>
+          ← Volunteer home
+        </Link>
       </div>
 
-      <p className="mt-1 text-xs text-muted-foreground">
-        {d.donorName ?? "Donor"} · {CLASSIFICATION_LABELS[d.classification]}
-      </p>
+      <header className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold">{d.title}</h1>
+          <DeliveryStatus status={run.status} />
+          {run.latestScan && (
+            <FreshnessBadge
+              status={run.latestScan.status}
+              score={run.latestScan.score}
+            />
+          )}
+        </div>
+        <p role="status" className="text-sm font-medium">
+          {banner}
+        </p>
+      </header>
 
-      <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
-        <div>
-          <dt className="text-muted-foreground">Distance</dt>
-          <dd className="font-medium">{d.distanceKm.toFixed(1)} km</dd>
+      {failed && d.status === "DIVERTED" && (
+        <div className="rounded-lg border-2 border-destructive p-4 text-sm">
+          <p className="font-semibold">
+            Do not hand this food to anyone to eat.
+          </p>
+          <p className="mt-1">
+            It was reclassified for{" "}
+            {DISPOSITION_LABELS[d.disposition as Disposition]?.toLowerCase() ??
+              "other use"}
+            .{d.divertedReason ? ` ${d.divertedReason}` : ""}
+          </p>
         </div>
-        <div>
-          <dt className="text-muted-foreground">Time left</dt>
-          <dd className="font-medium">{formatTimeLeft(d.expiresAt)}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Servings</dt>
-          <dd className="font-medium">{d.estimatedServings}</dd>
-        </div>
-      </dl>
+      )}
 
-      {selected && (
-        <div className="mt-3 space-y-2 border-t pt-3 text-sm">
-          <ul className="list-inside list-disc text-xs">
-            {d.items.map((it, idx) => (
-              <li key={idx}>
+      <FoodPhotoGallery photos={d.photos} title={d.title} />
+
+      <section className="rounded-lg border p-4 text-sm">
+        <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+          <div>
+            <dt className="text-muted-foreground">From</dt>
+            <dd className="font-medium">{d.donorName ?? "Donor"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Pickup address</dt>
+            <dd className="font-medium">{d.address ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Food</dt>
+            <dd className="font-medium">
+              {CLASSIFICATION_LABELS[d.classification]} · {d.servings} servings
+              · {d.quantityKg} kg
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Deliver to</dt>
+            <dd className="font-medium">
+              {run.ngoIsBuyer
+                ? `${run.ngoName ?? "The buyer"} (bought this batch)`
+                : (run.ngoName ?? "Not chosen yet")}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Safe to eat for</dt>
+            <dd className="font-medium">{formatTimeLeft(d.expiresAt)}</dd>
+          </div>
+          {d.instructions && (
+            <div className="sm:col-span-2">
+              <dt className="text-muted-foreground">Pickup instructions</dt>
+              <dd className="font-medium">{d.instructions}</dd>
+            </div>
+          )}
+        </dl>
+        {d.items.length > 0 && (
+          <ul className="mt-3 list-inside list-disc text-muted-foreground">
+            {d.items.map((it, i) => (
+              <li key={i}>
                 {it.name} — {it.quantity}
                 {it.notes ? ` (${it.notes})` : ""}
               </li>
             ))}
           </ul>
-          {d.pickupAddress && <p className="text-xs">📍 {d.pickupAddress}</p>}
-          {d.pickupInstructions && (
-            <p className="text-xs text-muted-foreground">
-              {d.pickupInstructions}
-            </p>
-          )}
-        </div>
+        )}
+      </section>
+
+      {active && tracking && (
+        <LiveTracker
+          deliveryId={tracking.deliveryId}
+          status={tracking.status}
+          active={tracking.active}
+          viewer="VOLUNTEER"
+          volunteerName={tracking.volunteerName}
+          pickup={tracking.pickup}
+          dropoff={tracking.dropoff}
+          position={tracking.position}
+          realtime={isRealtimeConfigured()}
+        />
       )}
 
-      <Button
-        className="mt-3 w-full"
-        size="sm"
-        disabled={claiming}
-        onClick={(e) => {
-          e.stopPropagation();
-          onClaim();
-        }}
-      >
-        {claiming ? "Claiming…" : "Claim pickup"}
-      </Button>
-    </div>
+      {active && (
+        <ol className="space-y-3">
+          <Step
+            n={1}
+            title="Check freshness"
+            note="Recommended. A spoiled result cancels this delivery and reclassifies the food."
+            state="current"
+          >
+            <FreshnessScanner
+              donationId={d.id}
+              simulatorEnabled={simulatorAllowed()}
+            />
+          </Step>
+
+          <Step
+            n={2}
+            title="Pickup: show the donor your code"
+            note="The donor types this code into their FoodLink dashboard when you arrive."
+            state={assigned ? "current" : "done"}
+          >
+            {assigned && (
+              <>
+                {!run.ngoIsBuyer && (
+                  <NgoPicker
+                    deliveryId={run.id}
+                    options={run.ngoOptions}
+                    currentId={run.ngoId}
+                  />
+                )}
+                <Code value={run.pickupOtp} />
+                {!run.pickupOtp && (
+                  <p className="text-sm text-destructive">
+                    This delivery has no code (it was created before the
+                    upgrade). Release it and claim it again.
+                  </p>
+                )}
+                {locked && (
+                  <p className="text-sm text-destructive">
+                    Code entry is locked for a few minutes after too many wrong
+                    tries.
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  Waiting for the donor to confirm… this page updates by itself.
+                </p>
+                <ReleaseButton deliveryId={run.id} />
+              </>
+            )}
+          </Step>
+
+          <Step
+            n={3}
+            title="At the NGO: take a handoff photo"
+            note="Photograph the food being handed over. The NGO sees it before confirming."
+            state={assigned ? "upcoming" : run.hasPhoto ? "done" : "current"}
+          >
+            {onTheWay && (
+              <PhotoUpload
+                deliveryId={run.id}
+                existingPhotoUrl={photoUrl}
+                hasPhoto={run.hasPhoto}
+              />
+            )}
+          </Step>
+
+          <Step
+            n={4}
+            title={
+              run.ngoIsBuyer
+                ? "Drop-off: show the buyer your code"
+                : "Drop-off: show the NGO your code"
+            }
+            note={
+              run.ngoName
+                ? `${run.ngoName} types this code into their dashboard.`
+                : undefined
+            }
+            state={assigned ? "upcoming" : "current"}
+          >
+            {onTheWay && (
+              <>
+                <Code value={run.dropoffOtp} />
+                {!run.hasPhoto && (
+                  <p className="text-sm text-muted-foreground">
+                    The NGO can only confirm after your photo is uploaded.
+                  </p>
+                )}
+                {locked && (
+                  <p className="text-sm text-destructive">
+                    Code entry is locked for a few minutes after too many wrong
+                    tries.
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  Waiting for the NGO to confirm… this page updates by itself.
+                </p>
+              </>
+            )}
+          </Step>
+        </ol>
+      )}
+
+      {!active && (
+        <div className="flex flex-wrap gap-2">
+          <Link href="/volunteer/discover" className={buttonVariants()}>
+            Find more pickups
+          </Link>
+          <Link
+            href="/volunteer"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            Back to volunteer home
+          </Link>
+        </div>
+      )}
+    </main>
   );
 }

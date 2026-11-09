@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { AutoRefresh } from "@/components/shared/auto-refresh";
+import { FoodPhotoGallery } from "@/components/shared/food-photo";
 import { LiveTracker } from "@/components/shared/live-tracker";
 import { FreshnessScanner } from "@/components/shared/freshness-scanner";
 import {
@@ -127,7 +128,7 @@ export default async function DeliveryPage({
           href="/volunteer"
           className={buttonVariants({ variant: "ghost", size: "sm" })}
         >
-          ← My deliveries
+          ← Volunteer home
         </Link>
       </div>
 
@@ -160,6 +161,8 @@ export default async function DeliveryPage({
           </p>
         </div>
       )}
+
+      <FoodPhotoGallery photos={d.photos} title={d.title} />
 
       <section className="rounded-lg border p-4 text-sm">
         <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
@@ -334,7 +337,7 @@ export default async function DeliveryPage({
             href="/volunteer"
             className={buttonVariants({ variant: "outline" })}
           >
-            Back to my deliveries
+            Back to volunteer home
           </Link>
         </div>
       )}

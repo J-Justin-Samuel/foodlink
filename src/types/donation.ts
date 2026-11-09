@@ -31,4 +31,6 @@ export interface NearbyDonation {
   hoursUntilExpiry: number;
   expiresAt: string; // ISO timestamp
   urgencyScore: number;
+  /** Paths of the donor's food photos (served by /api/food-photos/<id>). */
+  photos: string[];
 }

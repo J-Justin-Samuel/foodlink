@@ -1,5 +1,6 @@
 import { ngoStatusSql } from "@/lib/verification";
 import "server-only";
+import { cleanPhotoList } from "@/lib/food-photo-rules";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { DonationItem, FoodClassification } from "@/types/donation";
@@ -26,6 +27,7 @@ export interface DonorBoardItem {
   freshnessScore: number | null;
   freshnessStatus: string | null;
   quantityKg: number;
+  photos: string[];
   /** Stage 5: the batch's auction, if it has one. Prices in paise. */
   auction: null | {
     id: string;
@@ -54,7 +56,7 @@ export async function getDonorBoard(
 ): Promise<DonorBoardItem[]> {
   const r = await rows<Record<string, any>>(sql`
     SELECT d.id, d.title, d.status, d.food_classification, d.estimated_servings,
-           d.shelf_life_expires_at, d.disposition, d.quantity_kg::float8 AS quantity_kg,
+           d.shelf_life_expires_at, d.disposition, d.quantity_kg::float8 AS quantity_kg, d.image_urls,
            ls.freshness_score, ls.verdict AS freshness_status,
            fa.id AS auction_id, fa.status AS auction_status, fa.start_price::float8 AS a_start,
            fa.reserve_price::float8 AS a_floor, fa.decrement_step::float8 AS a_step,
@@ -96,6 +98,7 @@ export async function getDonorBoard(
     freshnessScore: x.freshness_score,
     freshnessStatus: x.freshness_status,
     quantityKg: x.quantity_kg,
+    photos: cleanPhotoList(x.image_urls),
     auction: x.auction_id
       ? {
           id: x.auction_id,
@@ -137,6 +140,8 @@ export interface VolunteerBoardItem {
   ngoName: string | null;
   failureReason: string | null;
   createdAt: string;
+  photos: string[];
+  quantityKg: number;
 }
 
 export async function getVolunteerBoard(
@@ -145,7 +150,7 @@ export async function getVolunteerBoard(
   const r = await rows<Record<string, any>>(sql`
     SELECT dl.id AS delivery_id, dl.status, dl.failure_reason, dl.created_at,
            d.title, d.status AS donation_status, d.pickup_address,
-           d.estimated_servings, d.shelf_life_expires_at,
+           d.estimated_servings, d.shelf_life_expires_at, d.image_urls, d.quantity_kg::float8 AS quantity_kg,
            COALESCE(np.organization_name, np.display_name) AS ngo_name
     FROM deliveries dl
     JOIN donations d ON d.id = dl.donation_id
@@ -165,6 +170,8 @@ export async function getVolunteerBoard(
     ngoName: x.ngo_name,
     failureReason: x.failure_reason,
     createdAt: iso(x.created_at)!,
+    photos: cleanPhotoList(x.image_urls),
+    quantityKg: x.quantity_kg,
   }));
 }
 
@@ -204,6 +211,7 @@ export interface DeliveryRun {
     expiresAt: string;
     donorName: string | null;
     divertedReason: string | null;
+    photos: string[];
   };
   latestScan: null | { score: number; status: string; at: string };
   ngoOptions: NgoOption[];
@@ -221,7 +229,7 @@ export async function getDeliveryRun(
            d.id AS donation_id, d.title, d.status AS donation_status, d.disposition,
            d.food_classification, d.estimated_servings, d.quantity_kg::float8 AS quantity_kg,
            d.items, d.pickup_address, d.pickup_instructions, d.shelf_life_expires_at,
-           d.diversion_reason,
+           d.diversion_reason, d.image_urls,
            COALESCE(dp.organization_name, dp.display_name) AS donor_name,
            ls.freshness_score, ls.verdict AS scan_status, ls.scanned_at
     FROM deliveries dl
@@ -285,6 +293,7 @@ export async function getDeliveryRun(
       expiresAt: iso(x.shelf_life_expires_at)!,
       donorName: x.donor_name,
       divertedReason: x.diversion_reason,
+      photos: cleanPhotoList(x.image_urls),
     },
     latestScan:
       x.freshness_score == null
@@ -316,12 +325,15 @@ export interface NgoBoardItem {
   freshnessScore: number | null;
   freshnessStatus: string | null;
   deliveredAt: string | null;
+  photos: string[];
+  quantityKg: number;
 }
 
 export async function getNgoBoard(ngoId: string): Promise<NgoBoardItem[]> {
   const r = await rows<Record<string, any>>(sql`
     SELECT dl.id, dl.status, dl.handoff_photo_key, dl.otp_locked_until, dl.dropoff_confirmed_at,
-           d.title, d.food_classification, d.estimated_servings, d.items, d.pickup_address,
+           d.title, d.food_classification, d.estimated_servings, d.items, d.pickup_address, d.image_urls,
+           d.quantity_kg::float8 AS quantity_kg,
            COALESCE(dp.organization_name, dp.display_name) AS donor_name,
            vp.display_name AS volunteer_name,
            ls.freshness_score, ls.verdict AS freshness_status
@@ -352,5 +364,7 @@ export async function getNgoBoard(ngoId: string): Promise<NgoBoardItem[]> {
     freshnessScore: x.freshness_score,
     freshnessStatus: x.freshness_status,
     deliveredAt: iso(x.dropoff_confirmed_at),
+    photos: cleanPhotoList(x.image_urls),
+    quantityKg: x.quantity_kg,
   }));
 }

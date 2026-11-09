@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { sql } from "drizzle-orm";
+import { photoUrl } from "@/lib/food-photo-rules";
 import { db } from "@/db";
 import { requireRole } from "@/lib/rbac";
 import { toFailure, validationFailure } from "@/lib/action-utils";
@@ -62,26 +63,59 @@ export async function createDonation(
       };
     }
 
-    // Raw SQL because the geography value is built with ST_MakePoint(lng, lat).
-    const rows = await db.execute(sql`
-      INSERT INTO donations (
-        donor_id, title, food_classification, estimated_servings, quantity_kg,
-        items, prepared_at, shelf_life_expires_at,
-        pickup_location, pickup_address, pickup_instructions,
-        status
-      ) VALUES (
-        ${user.id}, ${d.title}, ${d.classification}, ${d.estimatedServings}, ${d.quantityKg},
-        ${JSON.stringify(d.items)}::jsonb, ${preparedAt.toISOString()}::timestamptz,
-        ${expiresAt.toISOString()}::timestamptz,
-        ST_SetSRID(ST_MakePoint(${d.pickupLng}, ${d.pickupLat}), 4326)::geography,
-        ${d.pickupAddress}, ${d.pickupInstructions || null},
-        'LISTED'
-      )
-      RETURNING id
-    `);
+    const photoIds = [...new Set(d.photoIds)];
+    const id = await db.transaction(async (tx) => {
+      // The photos must be this donor's own and not yet used by another listing. Locked so they can't be shared.
+      const mine = (await tx.execute(sql`
+        SELECT id FROM food_photos
+        WHERE uploader_id = ${user.id} AND donation_id IS NULL AND id IN (${sql.join(
+          photoIds.map((p) => sql`${p}::uuid`),
+          sql`, `,
+        )})
+        FOR UPDATE
+      `)) as unknown as { id: string }[];
+      if (mine.length !== photoIds.length) return null;
 
-    const id = (rows as unknown as { id: string }[])[0]?.id;
-    if (!id) throw new Error("Insert returned no id");
+      // Raw SQL because the geography value is built with ST_MakePoint(lng, lat).
+      const rows = await tx.execute(sql`
+        INSERT INTO donations (
+          donor_id, title, food_classification, estimated_servings, quantity_kg,
+          items, prepared_at, shelf_life_expires_at,
+          pickup_location, pickup_address, pickup_instructions,
+          image_urls, status
+        ) VALUES (
+          ${user.id}, ${d.title}, ${d.classification}, ${d.estimatedServings}, ${d.quantityKg},
+          ${JSON.stringify(d.items)}::jsonb, ${preparedAt.toISOString()}::timestamptz,
+          ${expiresAt.toISOString()}::timestamptz,
+          ST_SetSRID(ST_MakePoint(${d.pickupLng}, ${d.pickupLat}), 4326)::geography,
+          ${d.pickupAddress}, ${d.pickupInstructions || null},
+          ${JSON.stringify(photoIds.map(photoUrl))}::jsonb, 'LISTED'
+        )
+        RETURNING id
+      `);
+      const newId = (rows as unknown as { id: string }[])[0]?.id;
+      if (!newId) throw new Error("Insert returned no id");
+      await tx.execute(
+        sql`UPDATE food_photos SET donation_id = ${newId} WHERE id IN (${sql.join(
+          photoIds.map((p) => sql`${p}::uuid`),
+          sql`, `,
+        )})`,
+      );
+      return newId as string;
+    });
+    if (!id) {
+      return {
+        ok: false,
+        code: "VALIDATION",
+        error:
+          "One of your photos is no longer available. Please add the photo again.",
+        fieldErrors: {
+          photoIds: [
+            "One of your photos is no longer available. Please add the photo again.",
+          ],
+        },
+      };
+    }
 
     revalidatePath("/volunteer/discover");
     revalidatePath("/donor");

@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AddressSearch } from "@/components/shared/address-search";
+import {
+  FoodPhotoPicker,
+  type PickedPhoto,
+} from "@/components/shared/food-photo-picker";
 import { createDonation } from "@/lib/actions/donations";
 import {
   donationFormSchema,
@@ -33,6 +38,7 @@ const EMPTY: DonationFormValues = {
   pickupLat: 0,
   pickupLng: 0,
   pickupInstructions: "",
+  photoIds: [],
 };
 
 const selectClass =
@@ -41,6 +47,7 @@ const selectClass =
 export function DonationForm() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
 
   const form = useForm<DonationFormValues>({
     resolver: zodResolver(donationFormSchema),
@@ -93,6 +100,7 @@ export function DonationForm() {
     }
 
     setCreatedId(result.data.id);
+    setPhotos([]);
     reset({ ...EMPTY, preparedAt: toLocalInputValue(new Date()) });
   }
 
@@ -103,13 +111,39 @@ export function DonationForm() {
         <p className="text-sm text-muted-foreground">
           Nearby volunteers can now see and claim this batch.
         </p>
-        <Button onClick={() => setCreatedId(null)}>List another batch</Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Link href="/donor" className={buttonVariants()}>
+            Go to my donations
+          </Link>
+          <Button variant="outline" onClick={() => setCreatedId(null)}>
+            List another batch
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8" noValidate>
+      {/* Photo first: it is what everyone sees when deciding */}
+      <section className="space-y-2" aria-labelledby="photo-h">
+        <h2 id="photo-h" className="text-sm font-medium">
+          Photo of the food
+        </h2>
+        <FoodPhotoPicker
+          value={photos}
+          error={errors.photoIds?.message}
+          onChange={(next) => {
+            setPhotos(next);
+            setValue(
+              "photoIds",
+              next.map((p) => p.id),
+              { shouldValidate: true },
+            );
+          }}
+        />
+      </section>
+
       {/* Batch basics */}
       <section className="grid gap-4 sm:grid-cols-2">
         <Field
@@ -282,6 +316,11 @@ export function DonationForm() {
       <Button type="submit" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? "Listing…" : "List donation"}
       </Button>
+      {photos.length === 0 && (
+        <p className="text-center text-xs text-muted-foreground">
+          Add a photo of the food above to list it.
+        </p>
+      )}
     </form>
   );
 }

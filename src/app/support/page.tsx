@@ -110,7 +110,7 @@ export default async function SupportPage({
         href={ROLE_HOME[user.role]}
         className={buttonVariants({ variant: "outline" })}
       >
-        Back to my dashboard
+        Back to my home page
       </Link>
     </main>
   );

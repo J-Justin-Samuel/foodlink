@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { AutoRefresh } from "@/components/shared/auto-refresh";
 import { AuctionCheckout } from "@/components/shared/auction-checkout";
+import { FoodPhotoGallery } from "@/components/shared/food-photo";
 import { getAuctionDetail } from "@/lib/auction-queries";
 import { buyerCanBuy } from "@/lib/buyer-eligibility";
 import { requireDashboardUser } from "@/lib/guards";
@@ -48,6 +49,8 @@ export default async function AuctionPage({
       >
         ← All auctions
       </Link>
+
+      <FoodPhotoGallery photos={a.photos} title={a.title} />
 
       <div>
         <h1 className="text-2xl font-bold">{a.title}</h1>

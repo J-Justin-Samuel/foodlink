@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { requireRole } from "@/lib/rbac";
 import { toFailure, validationFailure } from "@/lib/action-utils";
+import { cleanPhotoList } from "@/lib/food-photo-rules";
 import { nearbySearchSchema } from "@/lib/validations/donation";
 import type { ActionResult } from "@/types/action-result";
 import type {
@@ -28,6 +29,7 @@ interface Row {
   hours_until_expiry: number;
   shelf_life_expires_at: Date | string;
   urgency_score: number;
+  image_urls: string[] | null;
 }
 
 /**
@@ -64,7 +66,7 @@ export async function findNearbyDonations(
         SELECT
           d.id, d.title, d.food_classification, d.estimated_servings,
           d.quantity_kg::float8 AS quantity_kg, d.items,
-          d.pickup_address, d.pickup_instructions, d.shelf_life_expires_at,
+          d.pickup_address, d.pickup_instructions, d.shelf_life_expires_at, d.image_urls,
           ST_Y(d.pickup_location::geometry) AS lat,
           ST_X(d.pickup_location::geometry) AS lng,
           (ST_Distance(d.pickup_location, ref.pt) / 1000.0)::float8 AS distance_km,
@@ -111,6 +113,7 @@ export async function findNearbyDonations(
       hoursUntilExpiry: r.hours_until_expiry,
       expiresAt: new Date(r.shelf_life_expires_at).toISOString(),
       urgencyScore: r.urgency_score,
+      photos: cleanPhotoList(r.image_urls),
     }));
 
     return { ok: true, data };

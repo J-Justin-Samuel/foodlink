@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { toMinor } from "@/lib/auction-price";
+import { cleanPhotoList } from "@/lib/food-photo-rules";
 import type { DonationItem, FoodClassification } from "@/types/donation";
 
 const iso = (d: Date | string | null | undefined) =>
@@ -27,6 +28,7 @@ export interface AuctionCard {
   startsAtMs: number;
   status: string;
   distanceKm: number | null;
+  photos: string[];
 }
 
 const toCard = (x: Record<string, any>): AuctionCard => ({
@@ -47,12 +49,13 @@ const toCard = (x: Record<string, any>): AuctionCard => ({
   startsAtMs: new Date(x.starts_at).getTime(),
   status: x.status,
   distanceKm: x.distance_km,
+  photos: cleanPhotoList(x.image_urls),
 });
 
 const SELECT = (buyerId: string) => sql`
   SELECT fa.id, fa.donation_id, fa.status, fa.start_price::float8 AS start_price, fa.reserve_price::float8 AS reserve_price,
          fa.decrement_step::float8 AS decrement_step, fa.interval_minutes, fa.starts_at, fa.ends_at,
-         d.title, d.food_classification, d.estimated_servings, d.quantity_kg::float8 AS quantity_kg, d.items, d.pickup_address,
+         d.title, d.food_classification, d.estimated_servings, d.quantity_kg::float8 AS quantity_kg, d.items, d.pickup_address, d.image_urls,
          COALESCE(dp.organization_name, dp.display_name) AS donor_name,
          (ST_Distance(d.pickup_location, bp.location) / 1000.0)::float8 AS distance_km
   FROM food_auctions fa
@@ -119,13 +122,14 @@ export interface BuyerOrder {
   createdAt: string;
   deliveryId: string | null;
   deliveryStatus: string | null;
+  photos: string[];
 }
 
 /** The buyer's purchases (not abandoned checkouts), newest first. */
 export async function getBuyerOrders(buyerId: string): Promise<BuyerOrder[]> {
   const r = await rows<Record<string, any>>(sql`
     SELECT o.id, o.auction_id, o.status, o.amount_minor, o.currency, o.created_at, d.title,
-           dl.id AS delivery_id, dl.status AS delivery_status
+           dl.id AS delivery_id, dl.status AS delivery_status, d.image_urls
     FROM auction_orders o
     JOIN food_auctions fa ON fa.id = o.auction_id
     JOIN donations d ON d.id = fa.donation_id
@@ -147,5 +151,6 @@ export async function getBuyerOrders(buyerId: string): Promise<BuyerOrder[]> {
     createdAt: iso(x.created_at)!,
     deliveryId: x.delivery_id,
     deliveryStatus: x.delivery_status,
+    photos: cleanPhotoList(x.image_urls),
   }));
 }

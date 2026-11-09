@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FOOD_CLASSIFICATIONS } from "@/types/donation";
+import { MAX_FOOD_PHOTOS } from "@/lib/food-photo-rules";
 
 export const donationItemSchema = z.object({
   name: z.string().trim().min(1, "Item name is required").max(120),
@@ -44,6 +45,14 @@ export const donationFormSchema = z
     pickupLat: z.number().min(-90).max(90),
     pickupLng: z.number().min(-180).max(180),
     pickupInstructions: z.string().trim().max(500).optional(),
+    /** Ids returned by POST /api/food-photos. At least one photo of the food is required. */
+    photoIds: z
+      .array(z.string().uuid())
+      .min(
+        1,
+        "Take a photo of the food so volunteers, NGOs and buyers can see it",
+      )
+      .max(MAX_FOOD_PHOTOS, `At most ${MAX_FOOD_PHOTOS} photos`),
   })
   .refine((v) => !(v.pickupLat === 0 && v.pickupLng === 0), {
     path: ["pickupAddress"],

@@ -1,8 +1,13 @@
 import Link from "next/link";
-import { PackageCheck, MapPin, Utensils } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { AutoRefresh } from "@/components/shared/auto-refresh";
-import { GlassBottomNav } from "@/components/shared/glass-bottom-nav";
+import { FoodPhoto } from "@/components/shared/food-photo";
+import {
+  EmptyState,
+  NextStep,
+  QuickLinks,
+  StatTiles,
+} from "@/components/shared/hub";
 import { OtpForm } from "@/components/shared/otp-form";
 import {
   DeliveryStatus,
@@ -10,152 +15,245 @@ import {
 } from "@/components/shared/status-badge";
 import { confirmDropoff } from "@/lib/actions/deliveries";
 import { requireDashboardUser } from "@/lib/guards";
-import { getNgoBoard } from "@/lib/queries";
+import { getNgoBoard, type NgoBoardItem } from "@/lib/queries";
 import { presignView } from "@/lib/storage";
 import { canTrackStatus } from "@/lib/tracking-queries";
 import { CLASSIFICATION_LABELS } from "@/types/donation";
 
 export const dynamic = "force-dynamic";
 
+const OPEN = ["ASSIGNED", "PICKED_UP", "EN_ROUTE"];
+
 export default async function NgoHomePage() {
   const user = await requireDashboardUser(["NGO", "ADMIN"]);
   const board = await getNgoBoard(user.id);
-  const photos = await Promise.all(board.map((b) => presignView(b.photoKey)));
-  const open = board.filter(
-    (b) =>
-      b.status === "ASSIGNED" ||
-      b.status === "PICKED_UP" ||
-      b.status === "EN_ROUTE",
+  const photos = await Promise.all(
+    board.map((b) => presignView(b.photoKey).catch(() => null)),
   );
+  const photoOf = new Map(board.map((b, i) => [b.id, photos[i]]));
+  const open = board.filter((b) => OPEN.includes(b.status));
+  const done = board.filter((b) => b.status === "DELIVERED");
+  const arrived = open.filter(
+    (b) => b.status === "PICKED_UP" || b.status === "EN_ROUTE",
+  );
+  const servings = done.reduce((n, b) => n + b.servings, 0);
+  const kg = done.reduce((n, b) => n + b.quantityKg, 0);
 
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 pb-32 pt-8">
+    <main className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8">
       {open.length > 0 && <AutoRefresh everyMs={8000} />}
 
-      <div className="glass-orange rounded-[2rem] p-6 text-white">
-        <h1 className="text-3xl font-bold">Incoming deliveries</h1>
-        <p className="mt-1 max-w-md text-sm text-white/90">
-          When the volunteer arrives, check the photo and the food, then enter
-          the code they show you.
+      <header>
+        <h1 className="text-2xl font-bold">NGO home</h1>
+        <p className="text-sm text-muted-foreground">
+          Food coming to you. Check the photos, check the food, then confirm
+          with the volunteer&apos;s code.
         </p>
-        <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
-          <PackageCheck className="h-4 w-4" />
-          {open.length} on the way
-        </p>
-      </div>
+      </header>
 
-      {board.length === 0 && (
-        <div className="glass rounded-3xl p-10 text-center">
-          <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-orange-soft">
-            <Utensils className="h-6 w-6 text-orange-vibrant" />
-          </span>
-          <p className="font-display text-lg font-bold text-forest">
-            No deliveries are heading your way yet
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            This page updates by itself.
-          </p>
-        </div>
+      {user.onboardingStatus === "SUBMITTED" && user.role === "NGO" && (
+        <p className="rounded-lg border-2 border-amber-500 p-3 text-sm">
+          Your registration is being reviewed. You can already receive food
+          unless your administrator requires approval first.
+        </p>
       )}
 
-      <ul className="space-y-5">
-        {board.map((b, i) => {
-          const photo = photos[i];
-          const isOpen = open.includes(b);
-          return (
-            <li
-              key={b.id}
-              className="glass group space-y-3 overflow-hidden rounded-3xl p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-orange-900/10"
-            >
-              {photo && (
-                <div className="-mx-4 -mt-4 overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photo}
-                    alt="Handoff photo from the volunteer"
-                    className="h-48 w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                </div>
-              )}
+      {arrived.length > 0 ? (
+        <NextStep
+          tone="urgent"
+          title={`${arrived[0].title} is on its way${arrived.length > 1 ? ` (and ${arrived.length - 1} more)` : ""}`}
+          body="When the volunteer arrives, enter their drop-off code to confirm."
+          href={`#delivery-${arrived[0].id}`}
+          cta="Confirm delivery"
+        />
+      ) : open.length > 0 ? (
+        <NextStep
+          title={`${open.length} volunteer${open.length > 1 ? "s are" : " is"} collecting food for you`}
+          body="You'll be asked for a code when it arrives."
+          href={`#delivery-${open[0].id}`}
+          cta="See details"
+        />
+      ) : (
+        <NextStep
+          title="Nothing is heading your way yet"
+          body="Volunteers choose which NGO to deliver to. This page updates by itself."
+          href="/support"
+          cta="Need help?"
+        />
+      )}
 
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-display text-lg font-bold text-forest">
-                  {b.title}
-                </h2>
-                <DeliveryStatus status={b.status} />
-                {b.freshnessStatus && b.freshnessScore !== null && (
-                  <FreshnessBadge
-                    status={b.freshnessStatus}
-                    score={b.freshnessScore}
-                  />
-                )}
-              </div>
-
-              <p className="text-sm text-charcoal/70">
-                From {b.donorName ?? "donor"} · carried by{" "}
-                {b.volunteerName ?? "volunteer"} ·{" "}
-                {CLASSIFICATION_LABELS[b.classification]} · {b.servings}{" "}
-                servings
-              </p>
-
-              {b.items.length > 0 && (
-                <ul className="flex flex-wrap gap-2">
-                  {b.items.map((it, k) => (
-                    <li
-                      key={k}
-                      className="rounded-full bg-orange-soft px-3 py-1 text-xs font-medium text-orange-900"
-                    >
-                      {it.name} · {it.quantity}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {canTrackStatus(b.status) && (
-                <Link
-                  href={`/track/${b.id}`}
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
-                >
-                  <MapPin className="h-3.5 w-3.5 text-orange-vibrant" />
-                  Track live on map
-                </Link>
-              )}
-
-              {isOpen && (
-                <div className="rounded-2xl bg-white/60 p-3 backdrop-blur-xl">
-                  <OtpForm
-                    deliveryId={b.id}
-                    action={confirmDropoff}
-                    label="Drop-off code (from the volunteer)"
-                    submitLabel="Confirm delivery"
-                    disabledReason={
-                      b.status !== "PICKED_UP"
-                        ? "Waiting for the volunteer to collect the food."
-                        : !b.photoKey
-                          ? "Waiting for the volunteer's handoff photo."
-                          : undefined
-                    }
-                  />
-                </div>
-              )}
-
-              {b.status === "DELIVERED" && (
-                <p className="rounded-full bg-fresh/15 px-3 py-1.5 text-center text-sm font-semibold text-forest">
-                  Delivered and confirmed
-                </p>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-
-      <GlassBottomNav
+      <StatTiles
         items={[
-          { href: "/", label: "Home", icon: "home" },
-          { href: "/ngo", label: "Deliveries", icon: "deliveries" },
-          { href: "/track", label: "Track", icon: "map" },
+          { value: open.length, label: "Incoming" },
+          { value: done.length, label: "Received" },
+          {
+            value: servings.toLocaleString("en-IN"),
+            label: "servings received",
+          },
+          {
+            value: kg.toLocaleString("en-IN", { maximumFractionDigits: 1 }),
+            label: "kg received",
+          },
+        ]}
+      />
+
+      <section className="space-y-4" aria-labelledby="in-h">
+        <h2 id="in-h" className="text-lg font-bold">
+          Incoming deliveries
+        </h2>
+        {open.length === 0 && (
+          <EmptyState
+            title="No deliveries are heading your way."
+            body="This page updates by itself."
+          />
+        )}
+        <ul className="space-y-4">
+          {open.map((b) => (
+            <Delivery
+              key={b.id}
+              b={b}
+              handoff={photoOf.get(b.id) ?? null}
+              open
+            />
+          ))}
+        </ul>
+      </section>
+
+      {done.length > 0 && (
+        <section className="space-y-4" aria-labelledby="done-h">
+          <h2 id="done-h" className="text-lg font-bold">
+            Received
+          </h2>
+          <ul className="space-y-4">
+            {done.map((b) => (
+              <Delivery
+                key={b.id}
+                b={b}
+                handoff={photoOf.get(b.id) ?? null}
+                open={false}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <QuickLinks
+        items={[
+          {
+            href: "/support",
+            label: "Help",
+            hint: "Report a problem with a delivery",
+          },
         ]}
       />
     </main>
+  );
+}
+
+function Delivery({
+  b,
+  handoff,
+  open,
+}: {
+  b: NgoBoardItem;
+  handoff: string | null;
+  open: boolean;
+}) {
+  return (
+    <li
+      id={`delivery-${b.id}`}
+      className="scroll-mt-20 space-y-3 rounded-lg border p-4"
+    >
+      <div className="flex gap-4">
+        <FoodPhoto
+          src={b.photos[0]}
+          alt={`Photo of ${b.title} from the donor`}
+          className="h-28 w-32 shrink-0"
+        />
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold">{b.title}</h3>
+            <DeliveryStatus status={b.status} />
+            {b.freshnessStatus && b.freshnessScore !== null && (
+              <FreshnessBadge
+                status={b.freshnessStatus}
+                score={b.freshnessScore}
+              />
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            From {b.donorName ?? "donor"} · carried by{" "}
+            {b.volunteerName ?? "volunteer"} ·{" "}
+            {CLASSIFICATION_LABELS[b.classification]} · {b.servings} servings ·{" "}
+            {b.quantityKg} kg
+          </p>
+          {b.photos.length > 1 && (
+            <p className="flex gap-2">
+              {b.photos.slice(1).map((p, i) => (
+                <a
+                  key={p}
+                  href={p}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open food photo ${i + 2} full size`}
+                >
+                  <FoodPhoto src={p} alt="" className="h-10 w-12" />
+                </a>
+              ))}
+            </p>
+          )}
+        </div>
+      </div>
+      {canTrackStatus(b.status) && (
+        <Link
+          href={`/track/${b.id}`}
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          Track live on map
+        </Link>
+      )}
+      {b.items.length > 0 && (
+        <ul className="list-inside list-disc text-sm text-muted-foreground">
+          {b.items.map((it, k) => (
+            <li key={k}>
+              {it.name} — {it.quantity}
+            </li>
+          ))}
+        </ul>
+      )}
+      {handoff && (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">
+            Handoff photo from the volunteer
+          </p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={handoff}
+            alt="Handoff photo from the volunteer"
+            className="max-h-56 rounded-md border"
+          />
+        </div>
+      )}
+      {open && (
+        <OtpForm
+          deliveryId={b.id}
+          action={confirmDropoff}
+          label="Drop-off code (from the volunteer)"
+          submitLabel="Confirm delivery"
+          disabledReason={
+            b.status !== "PICKED_UP"
+              ? "Waiting for the volunteer to collect the food."
+              : !b.photoKey
+                ? "Waiting for the volunteer's handoff photo."
+                : undefined
+          }
+        />
+      )}
+      {b.status === "DELIVERED" && (
+        <p className="text-sm font-medium text-green-700 dark:text-green-400">
+          Delivered and confirmed.
+        </p>
+      )}
+    </li>
   );
 }
