@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 import { Pill } from "@/components/shared/status-badge";
 import { RaiseDisputeForm } from "@/components/shared/raise-dispute-form";
 import { myDeliveryOptions, myDisputes } from "@/lib/admin-queries";
@@ -40,34 +39,39 @@ export default async function SupportPage({
     : await Promise.all([myDeliveryOptions(user.id), myDisputes(user.id)]);
 
   return (
-    <main className="mx-auto w-full max-w-2xl space-y-8 px-4 py-8">
+    <main className="mx-auto w-full max-w-2xl space-y-7 px-4 pb-8 pt-4">
       <div>
-        <h1 className="text-2xl font-bold">Help</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-3xl font-extrabold">Help</h1>
+        <p className="text-sm text-ink/70">
           Something wrong with a delivery, a person or a payment? Tell us and an
           admin will look into it.
         </p>
       </div>
       {isAdmin ? (
-        <p className="rounded-lg border-2 p-4 text-sm">
+        <p className="glass-strong rounded-3xl p-5 text-sm">
           Admins handle reports instead of sending them.{" "}
-          <Link href="/admin/disputes" className="font-semibold underline">
+          <Link
+            href="/admin/disputes"
+            className="font-bold text-flame underline underline-offset-4"
+          >
             Open reported problems
           </Link>
           .
         </p>
       ) : (
         <>
-          <RaiseDisputeForm
-            deliveries={deliveries}
-            initialDeliveryId={sp.delivery}
-          />
+          <div className="glass-strong rounded-3xl p-5">
+            <RaiseDisputeForm
+              deliveries={deliveries}
+              initialDeliveryId={sp.delivery}
+            />
+          </div>
           <section className="space-y-3" aria-labelledby="mine-h">
-            <h2 id="mine-h" className="font-semibold">
+            <h2 id="mine-h" className="text-xl font-bold">
               Your reports
             </h2>
             {mine.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-ink/70">
                 You haven&apos;t reported anything.
               </p>
             ) : (
@@ -80,7 +84,7 @@ export default async function SupportPage({
                   return (
                     <li
                       key={d.id}
-                      className="space-y-1 rounded-lg border-2 p-4 text-sm"
+                      className="glass-strong space-y-1 rounded-3xl p-4 text-sm"
                     >
                       <p className="flex flex-wrap items-center gap-2 font-semibold">
                         {DISPUTE_CATEGORY_LABELS[
@@ -88,13 +92,13 @@ export default async function SupportPage({
                         ] ?? d.category}{" "}
                         <Pill tone={tone}>{label}</Pill>
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-ink/70">
                         {when(d.createdAt)}
                         {d.deliveryTitle ? ` · ${d.deliveryTitle}` : ""}
                       </p>
                       <p className="whitespace-pre-wrap">{d.description}</p>
                       {d.resolutionNote && (
-                        <p className="rounded-md bg-muted p-2">
+                        <p className="rounded-2xl bg-peach/60 p-3">
                           <strong>FoodLink:</strong> {d.resolutionNote}
                         </p>
                       )}
@@ -106,10 +110,7 @@ export default async function SupportPage({
           </section>
         </>
       )}
-      <Link
-        href={ROLE_HOME[user.role]}
-        className={buttonVariants({ variant: "outline" })}
-      >
+      <Link href={ROLE_HOME[user.role]} className="btn-glass">
         Back to my home page
       </Link>
     </main>

@@ -12,7 +12,7 @@ export default async function OnboardingLayout({
       {user?.onboardingStatus === "REJECTED" && (
         <div
           role="alert"
-          className="border-b-2 border-destructive bg-red-50 px-4 py-3 text-center text-sm text-red-950 dark:bg-red-950/40 dark:text-red-100"
+          className="mx-3 mt-3 rounded-2xl border border-destructive/40 bg-red-50/90 px-4 py-3 text-center text-sm text-red-950 backdrop-blur-xl"
         >
           <p className="font-semibold">Your details were sent back.</p>
           <p>

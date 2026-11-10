@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Camera } from "lucide-react";
 import { MAX_FOOD_PHOTOS } from "@/lib/food-photo-rules";
 
 export interface PickedPhoto {
@@ -102,17 +102,16 @@ export function FoodPhotoPicker({
               <img
                 src={p.url}
                 alt={`Food photo ${i + 1}`}
-                className="h-28 w-36 rounded-md border-2 border-foreground object-cover"
+                className="h-28 w-36 rounded-2xl object-cover shadow-md"
               />
-              <Button
+              <button
                 type="button"
-                variant="outline"
-                size="sm"
+                className="btn-glass btn-sm w-full"
                 onClick={() => remove(p)}
                 aria-label={`Remove food photo ${i + 1}`}
               >
                 Remove
-              </Button>
+              </button>
             </li>
           ))}
         </ul>
@@ -132,20 +131,31 @@ export function FoodPhotoPicker({
           if (f) void add(f);
         }}
       />
-      <Button
-        type="button"
-        variant={value.length === 0 ? "default" : "outline"}
-        disabled={busy || full}
-        onClick={() => input.current?.click()}
-      >
-        {busy
-          ? "Uploading…"
-          : value.length === 0
-            ? "Take a photo of the food"
+      {value.length === 0 ? (
+        <button
+          type="button"
+          disabled={busy || full}
+          onClick={() => input.current?.click()}
+          className="lift flex w-full flex-col items-center gap-2 rounded-3xl border-2 border-dashed border-flame/60 bg-peach/60 px-4 py-8 text-center font-semibold text-[#9a3412] disabled:opacity-60"
+        >
+          <Camera className="h-8 w-8" aria-hidden />
+          {busy ? "Uploading…" : "Take a photo of the food"}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="btn-glass btn-sm"
+          disabled={busy || full}
+          onClick={() => input.current?.click()}
+        >
+          <Camera className="h-4 w-4" aria-hidden />{" "}
+          {busy
+            ? "Uploading…"
             : full
               ? "Photo limit reached"
               : "Add another photo"}
-      </Button>
+        </button>
+      )}
       <p className="text-xs text-muted-foreground">
         Required. Volunteers, NGOs and buyers see this photo before they decide.
         Show the food clearly, up to {MAX_FOOD_PHOTOS} photos.

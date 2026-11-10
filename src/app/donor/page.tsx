@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import { GiveAwayFreeButton } from "@/components/shared/donor-auction-actions";
 import { FoodPhoto } from "@/components/shared/food-photo";
 import {
@@ -54,21 +54,18 @@ export default async function DonorHomePage() {
   const meals = Math.floor(Math.round(kg * 100) / 40);
 
   return (
-    <main className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8">
+    <main className="mx-auto w-full max-w-4xl space-y-7 px-4 pb-8 pt-4">
       {active.length > 0 && <AutoRefresh everyMs={8000} />}
 
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Donor home</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-3xl font-extrabold sm:text-4xl">Donor home</h1>
+          <p className="mt-1 max-w-md text-sm text-ink/75">
             List surplus food, hand it to a volunteer, and see where it ends up.
           </p>
         </div>
-        <Link
-          href="/donor/donations/new"
-          className={buttonVariants({ size: "lg" })}
-        >
-          List surplus food
+        <Link href="/donor/donations/new" className="btn-flame">
+          <Plus className="h-5 w-5" aria-hidden /> List surplus food
         </Link>
       </header>
 
@@ -107,7 +104,7 @@ export default async function DonorHomePage() {
       />
 
       <section className="space-y-4" aria-labelledby="active-h">
-        <h2 id="active-h" className="text-lg font-bold">
+        <h2 id="active-h" className="text-xl font-bold">
           Active listings
         </h2>
         {active.length === 0 && board.length > 0 && (
@@ -136,7 +133,7 @@ export default async function DonorHomePage() {
 
       {past.length > 0 && (
         <section className="space-y-4" aria-labelledby="past-h">
-          <h2 id="past-h" className="text-lg font-bold">
+          <h2 id="past-h" className="text-xl font-bold">
             Past listings
           </h2>
           <ul className="space-y-4">
@@ -154,7 +151,7 @@ export default async function DonorHomePage() {
       )}
 
       <section className="space-y-3" aria-labelledby="more-h">
-        <h2 id="more-h" className="text-lg font-bold">
+        <h2 id="more-h" className="text-xl font-bold">
           More
         </h2>
         <QuickLinks
@@ -191,17 +188,21 @@ function DonationCard({
   return (
     <li
       id={`donation-${b.id}`}
-      className="scroll-mt-20 space-y-3 rounded-lg border p-4"
+      className="glass-strong group scroll-mt-20 space-y-3 overflow-hidden rounded-3xl p-3 transition-shadow duration-300 hover:shadow-[0_22px_44px_-18px_rgba(124,45,18,0.35)] sm:p-4"
     >
-      <div className="flex gap-4">
-        <FoodPhoto
-          src={b.photos[0]}
-          alt={`Photo of ${b.title}`}
-          className="h-24 w-28 shrink-0"
-        />
-        <div className="min-w-0 space-y-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
+        <div className="overflow-hidden rounded-2xl sm:shrink-0">
+          <FoodPhoto
+            src={b.photos[0]}
+            alt={`Photo of ${b.title}`}
+            className="h-44 w-full transition-transform duration-500 group-hover:scale-105 sm:h-28 sm:w-36"
+          />
+        </div>
+        <div className="min-w-0 space-y-1.5 px-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold">{b.title}</h3>
+            <h3 className="font-display text-xl font-bold text-forest">
+              {b.title}
+            </h3>
             <DonationStatus status={b.status} />
             {b.freshnessStatus && b.freshnessScore !== null && (
               <FreshnessBadge
@@ -210,7 +211,7 @@ function DonationCard({
               />
             )}
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-ink/70">
             {CLASSIFICATION_LABELS[b.classification]} · {b.servings} servings ·{" "}
             {b.quantityKg} kg · {formatTimeLeft(b.expiresAt)}
           </p>
@@ -218,7 +219,7 @@ function DonationCard({
       </div>
 
       {b.status === "DIVERTED" && (
-        <p className="rounded-md border-2 border-destructive p-3 text-sm">
+        <p className="rounded-2xl bg-red-50 p-3 text-sm text-red-950 ring-1 ring-red-300">
           This batch failed a freshness check and was reclassified for{" "}
           {DISPOSITION_LABELS[b.disposition as Disposition]?.toLowerCase() ??
             "other use"}
@@ -227,7 +228,7 @@ function DonationCard({
       )}
 
       {b.delivery && (
-        <div className="space-y-3 border-t pt-3 text-sm">
+        <div className="space-y-3 rounded-2xl bg-white/60 p-3 text-sm">
           <p className="flex flex-wrap items-center gap-2">
             <span>
               Volunteer <strong>{b.delivery.volunteerName}</strong>
@@ -241,10 +242,7 @@ function DonationCard({
             <DeliveryStatus status={b.delivery.status} />
           </p>
           {canTrackStatus(b.delivery.status) && (
-            <Link
-              href={`/track/${b.delivery.id}`}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
+            <Link href={`/track/${b.delivery.id}`} className="btn-glass btn-sm">
               Track live on map
             </Link>
           )}
@@ -260,15 +258,13 @@ function DonationCard({
             <p className="font-medium">Picked up. Thank you.</p>
           )}
           {b.delivery.status === "DELIVERED" && (
-            <p className="font-medium text-green-700 dark:text-green-400">
-              Delivered to the NGO.
-            </p>
+            <p className="font-semibold text-forest">✓ Delivered to the NGO.</p>
           )}
         </div>
       )}
 
       {b.auction && (
-        <div className="space-y-3 border-t pt-3 text-sm">
+        <div className="space-y-3 rounded-2xl bg-white/60 p-3 text-sm">
           {b.auction.status === "ACTIVE" && (
             <>
               <p className="font-medium">
@@ -289,9 +285,7 @@ function DonationCard({
                 }}
               />
               {b.auction.orderStatus === "PENDING_PAYMENT" && (
-                <p className="text-muted-foreground">
-                  A buyer is paying right now.
-                </p>
+                <p className="text-ink/70">A buyer is paying right now.</p>
               )}
               {b.auction.orderStatus === null && (
                 <GiveAwayFreeButton auctionId={b.auction.id} />
@@ -311,12 +305,12 @@ function DonationCard({
             </p>
           )}
           {b.auction.status === "CANCELLED" && (
-            <p className="text-muted-foreground">
+            <p className="text-ink/70">
               Auction ended without a sale. {b.auction.cancelReason ?? ""}
             </p>
           )}
           {b.auction.status === "EXPIRED" && (
-            <p className="text-muted-foreground">
+            <p className="text-ink/70">
               The auction ended when the food expired.
             </p>
           )}
@@ -327,13 +321,13 @@ function DonationCard({
         !b.auction &&
         b.status === "LISTED" &&
         b.quantityKg > MIN_AUCTION_KG && (
-          <div className="space-y-1 border-t pt-3">
-            <p className="text-sm text-muted-foreground">
+          <div className="space-y-2 rounded-2xl bg-peach/50 p-3">
+            <p className="text-sm text-ink/70">
               Over {MIN_AUCTION_KG} kg, so you can sell it to recover costs.
             </p>
             <Link
               href={`/donor/auctions/new?donationId=${b.id}`}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
+              className="btn-glass btn-sm"
             >
               Sell by auction
             </Link>
@@ -343,7 +337,7 @@ function DonationCard({
       {!b.delivery &&
         b.status === "LISTED" &&
         b.auction?.status !== "ACTIVE" && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-ink/70">
             Waiting for a volunteer to claim it.
           </p>
         )}

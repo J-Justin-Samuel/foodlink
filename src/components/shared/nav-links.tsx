@@ -4,7 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { NavItem } from "@/lib/routes";
 
-export function NavLinks({ items }: { items: NavItem[] }) {
+export function NavLinks({
+  items,
+  hideOnPhone = false,
+}: {
+  items: NavItem[];
+  hideOnPhone?: boolean;
+}) {
   const pathname = usePathname();
 
   // The most specific matching link is the active one (so "/donor" isn't
@@ -17,17 +23,17 @@ export function NavLinks({ items }: { items: NavItem[] }) {
   return (
     <nav
       aria-label="Main"
-      className="flex min-w-0 items-center gap-1 overflow-x-auto"
+      className={`min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] ${hideOnPhone ? "hidden md:flex" : "flex"}`}
     >
       {items.map((item) => (
         <Link
           key={item.href}
           href={item.href}
           aria-current={item.href === active ? "page" : undefined}
-          className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-semibold transition-all duration-200 ${
             item.href === active
-              ? "bg-foreground text-background"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              ? "bg-flame text-ink shadow-[0_6px_14px_-6px_rgba(249,115,22,0.8)]"
+              : "text-ink/70 hover:bg-peach hover:text-forest"
           }`}
         >
           {item.label}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
+import { ArrowRight, PackageOpen } from "lucide-react";
 
 /** Small building blocks for the role home pages, so every home reads the same way. */
 export function StatTiles({
@@ -12,23 +12,20 @@ export function StatTiles({
       {items.map((s) => {
         const body = (
           <>
-            <p className="text-2xl font-bold tabular-nums">{s.value}</p>
-            <p className="text-xs text-muted-foreground">{s.label}</p>
+            <p className="font-display text-3xl font-extrabold tabular-nums text-forest">
+              {s.value}
+            </p>
+            <p className="text-xs font-medium text-ink/70">{s.label}</p>
           </>
         );
         return (
           <li key={s.label}>
             {s.href ? (
-              <Link
-                href={s.href}
-                className="block rounded-lg border-2 border-foreground p-3 hover:bg-muted"
-              >
+              <Link href={s.href} className="glass lift block rounded-3xl p-4">
                 {body}
               </Link>
             ) : (
-              <div className="rounded-lg border-2 border-foreground p-3">
-                {body}
-              </div>
+              <div className="glass rounded-3xl p-4">{body}</div>
             )}
           </li>
         );
@@ -49,11 +46,14 @@ export function EmptyState({
   cta?: string;
 }) {
   return (
-    <div className="rounded-lg border-2 border-dashed p-8 text-center text-sm">
-      <p className="font-medium">{title}</p>
-      {body && <p className="mt-1 text-muted-foreground">{body}</p>}
+    <div className="glass flex flex-col items-center gap-2 rounded-3xl border-dashed p-8 text-center text-sm">
+      <span className="grid h-12 w-12 place-items-center rounded-2xl bg-peach text-flame">
+        <PackageOpen className="h-6 w-6" aria-hidden />
+      </span>
+      <p className="font-display text-base font-bold text-forest">{title}</p>
+      {body && <p className="max-w-sm text-ink/70">{body}</p>}
       {href && cta && (
-        <Link href={href} className={`${buttonVariants()} mt-4`}>
+        <Link href={href} className="btn-flame btn-sm mt-2">
           {cta}
         </Link>
       )}
@@ -78,14 +78,27 @@ export function NextStep({
   return (
     <section
       aria-label="What to do next"
-      className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 p-4 ${tone === "urgent" ? "border-amber-500 bg-amber-50 dark:bg-amber-950/30" : "border-foreground bg-muted"}`}
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-3xl p-5 shadow-[0_18px_40px_-20px_rgba(249,115,22,0.6)] ${
+        tone === "urgent"
+          ? "bg-gradient-to-br from-flame/90 to-[#fb923c] text-ink"
+          : "bg-gradient-to-br from-peach to-white ring-1 ring-flame/30"
+      }`}
     >
       <div className="min-w-0">
-        <p className="font-semibold">{title}</p>
-        {body && <p className="text-sm text-muted-foreground">{body}</p>}
+        <p className="font-display text-lg font-bold leading-snug text-ink">
+          {title}
+        </p>
+        {body && <p className="text-sm text-ink/80">{body}</p>}
       </div>
-      <Link href={href} className={buttonVariants()}>
-        {cta}
+      <Link
+        href={href}
+        className={
+          tone === "urgent"
+            ? "btn-glass btn-sm !bg-white !text-forest"
+            : "btn-flame btn-sm"
+        }
+      >
+        {cta} <ArrowRight className="h-4 w-4" aria-hidden />
       </Link>
     </section>
   );
@@ -102,12 +115,18 @@ export function QuickLinks({
         <li key={l.href}>
           <Link
             href={l.href}
-            className="block h-full rounded-lg border-2 p-3 hover:border-foreground hover:bg-muted"
+            className="glass lift group flex h-full items-center justify-between gap-2 rounded-3xl p-4"
           >
-            <span className="font-semibold">{l.label}</span>
-            <span className="block text-xs text-muted-foreground">
-              {l.hint}
+            <span>
+              <span className="block font-display font-bold text-forest">
+                {l.label}
+              </span>
+              <span className="block text-xs text-ink/70">{l.hint}</span>
             </span>
+            <ArrowRight
+              className="h-4 w-4 shrink-0 text-flame transition-transform group-hover:translate-x-1"
+              aria-hidden
+            />
           </Link>
         </li>
       ))}

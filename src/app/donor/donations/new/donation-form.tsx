@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AddressSearch } from "@/components/shared/address-search";
@@ -42,7 +42,7 @@ const EMPTY: DonationFormValues = {
 };
 
 const selectClass =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
+  "h-11 w-full rounded-xl border border-input bg-white/90 px-3 text-sm";
 
 export function DonationForm() {
   const [serverError, setServerError] = useState<string | null>(null);
@@ -106,28 +106,41 @@ export function DonationForm() {
 
   if (createdId) {
     return (
-      <div className="space-y-4 rounded-lg border p-6 text-center">
-        <h2 className="text-lg font-semibold">Donation listed</h2>
-        <p className="text-sm text-muted-foreground">
+      <div className="glass-strong space-y-4 rounded-3xl p-8 text-center">
+        <span
+          className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-fresh/20 text-3xl"
+          aria-hidden
+        >
+          🎉
+        </span>
+        <h2 className="text-2xl font-extrabold">Donation listed</h2>
+        <p className="text-sm text-ink/75">
           Nearby volunteers can now see and claim this batch.
         </p>
-        <div className="flex flex-wrap justify-center gap-2">
-          <Link href="/donor" className={buttonVariants()}>
+        <div className="flex flex-col justify-center gap-2 sm:flex-row">
+          <Link href="/donor" className="btn-flame">
             Go to my donations
           </Link>
-          <Button variant="outline" onClick={() => setCreatedId(null)}>
+          <button
+            type="button"
+            className="btn-glass"
+            onClick={() => setCreatedId(null)}
+          >
             List another batch
-          </Button>
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8" noValidate>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       {/* Photo first: it is what everyone sees when deciding */}
-      <section className="space-y-2" aria-labelledby="photo-h">
-        <h2 id="photo-h" className="text-sm font-medium">
+      <section
+        className="glass-strong space-y-3 rounded-3xl p-5"
+        aria-labelledby="photo-h"
+      >
+        <h2 id="photo-h" className="text-lg font-bold">
           Photo of the food
         </h2>
         <FoodPhotoPicker
@@ -145,7 +158,7 @@ export function DonationForm() {
       </section>
 
       {/* Batch basics */}
-      <section className="grid gap-4 sm:grid-cols-2">
+      <section className="glass-strong grid gap-4 rounded-3xl p-5 sm:grid-cols-2">
         <Field
           label="Batch title"
           error={errors.title?.message}
@@ -189,26 +202,25 @@ export function DonationForm() {
       </section>
 
       {/* Itemised contents */}
-      <section className="space-y-3">
+      <section className="glass-strong space-y-3 rounded-3xl p-5">
         <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium">
+          <Label className="text-lg font-bold text-forest">
             What&apos;s in the batch?
           </Label>
-          <Button
+          <button
             type="button"
-            variant="outline"
-            size="sm"
+            className="btn-glass btn-sm"
             onClick={() => append({ name: "", quantity: "", notes: "" })}
             disabled={fields.length >= 30}
           >
-            Add item
-          </Button>
+            + Add item
+          </button>
         </div>
 
         {fields.map((field, i) => (
           <div
             key={field.id}
-            className="grid gap-2 rounded-md border p-3 sm:grid-cols-[2fr_1fr_2fr_auto]"
+            className="grid gap-2 rounded-2xl bg-peach/40 p-3 sm:grid-cols-[2fr_1fr_2fr_auto]"
           >
             <Field label="Item" error={errors.items?.[i]?.name?.message}>
               <Input
@@ -256,7 +268,7 @@ export function DonationForm() {
       </section>
 
       {/* Freshness window */}
-      <section className="grid gap-4 sm:grid-cols-2">
+      <section className="glass-strong grid gap-4 rounded-3xl p-5 sm:grid-cols-2">
         <Field label="Prepared at" error={errors.preparedAt?.message}>
           <Input type="datetime-local" {...register("preparedAt")} />
         </Field>
@@ -276,7 +288,7 @@ export function DonationForm() {
       </section>
 
       {/* Pickup */}
-      <section className="space-y-4">
+      <section className="glass-strong space-y-4 rounded-3xl p-5">
         <Field label="Pickup address" error={errors.pickupAddress?.message}>
           <AddressSearch
             resolved={resolved}
@@ -301,7 +313,7 @@ export function DonationForm() {
           <textarea
             rows={3}
             placeholder="e.g. Use the rear kitchen entrance and ask for Chef Rina"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            className="w-full rounded-xl border border-input bg-white/90 px-3 py-2 text-sm"
             {...register("pickupInstructions")}
           />
         </Field>
@@ -313,9 +325,13 @@ export function DonationForm() {
         </p>
       )}
 
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
+      <button
+        type="submit"
+        className="btn-flame w-full text-base disabled:opacity-60"
+        disabled={isSubmitting}
+      >
         {isSubmitting ? "Listing…" : "List donation"}
-      </Button>
+      </button>
       {photos.length === 0 && (
         <p className="text-center text-xs text-muted-foreground">
           Add a photo of the food above to list it.

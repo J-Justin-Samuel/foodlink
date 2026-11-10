@@ -1,15 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  Utensils,
-  Bike,
-  HeartHandshake,
-  Gavel,
-  Check,
-  type LucideIcon,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Check } from "lucide-react";
+import { FoodImage } from "@/components/glass/food-image";
+import type { ImageKey } from "@/lib/images";
 import { cn } from "@/lib/utils";
 import { selectRole } from "@/app/onboarding/actions";
 import type { Role } from "@/types/roles";
@@ -18,31 +12,31 @@ const ROLE_OPTIONS: Array<{
   value: Role;
   label: string;
   blurb: string;
-  icon: LucideIcon;
+  img: ImageKey;
 }> = [
   {
     value: "DONOR",
+    img: "plate",
     label: "Donor",
-    blurb: "Hotels, restaurants and caterers listing surplus food",
-    icon: Utensils,
+    blurb: "Hotels, restaurants & event caterers listing surplus food",
   },
   {
     value: "VOLUNTEER",
+    img: "market",
     label: "Volunteer",
     blurb: "Pick up donations and deliver them to shelters",
-    icon: Bike,
   },
   {
     value: "NGO",
+    img: "healthy",
     label: "NGO / Shelter",
-    blurb: "Receive deliveries and share them with people in need",
-    icon: HeartHandshake,
+    blurb: "Receive deliveries and redistribute to beneficiaries",
   },
   {
     value: "BUYER",
-    label: "Commercial buyer",
-    blurb: "Bid on bulk surplus in flash auctions",
-    icon: Gavel,
+    img: "pancakes",
+    label: "Commercial Buyer",
+    blurb: "Bid on bulk surplus via flash auctions",
   },
 ];
 
@@ -74,78 +68,69 @@ export function RoleSelectStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-forest">
-          How will you use FoodLink?
-        </h2>
-        <p className="mt-1 text-sm text-charcoal/70">
-          This sets your dashboard and what you can do in the app.
+        <h2 className="text-2xl font-extrabold">How will you use FoodLink?</h2>
+        <p className="text-sm text-ink/75">
+          This decides your dashboard and what your account can do.
         </p>
       </div>
 
       <div
-        className="grid gap-3 sm:grid-cols-2"
         role="radiogroup"
-        aria-label="Role"
+        aria-label="Your role"
+        className="grid grid-cols-2 gap-3"
       >
-        {ROLE_OPTIONS.map(({ value, label, blurb, icon: Icon }) => {
-          const active = selected === value;
+        {ROLE_OPTIONS.map((opt) => {
+          const on = selected === opt.value;
           return (
             <button
-              key={value}
+              key={opt.value}
               type="button"
               role="radio"
-              aria-checked={active}
-              onClick={() => setSelected(value)}
+              aria-checked={on}
+              onClick={() => setSelected(opt.value)}
               className={cn(
-                "group relative flex items-start gap-3 rounded-2xl border bg-white/60 p-4 text-left backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg hover:shadow-orange-500/10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-vibrant/25",
-                active
-                  ? "border-orange-vibrant bg-orange-soft/70 shadow-lg shadow-orange-500/15"
-                  : "border-white/70",
+                "glass lift group relative flex flex-col overflow-hidden rounded-3xl text-left",
+                on &&
+                  "ring-2 ring-flame shadow-[0_18px_40px_-16px_rgba(249,115,22,0.6)]",
               )}
             >
-              <span
-                className={cn(
-                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors duration-300",
-                  active
-                    ? "bg-orange-vibrant text-white"
-                    : "bg-orange-soft text-orange-600 group-hover:bg-orange-vibrant group-hover:text-white",
-                )}
-              >
-                <Icon className="h-5 w-5" />
-              </span>
-              <span className="flex-1">
-                <span className="block font-display text-base font-bold text-forest">
-                  {label}
-                </span>
-                <span className="mt-0.5 block text-sm leading-snug text-charcoal/70">
-                  {blurb}
-                </span>
-              </span>
-              {active && (
-                <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-fresh text-white">
-                  <Check className="h-3 w-3" strokeWidth={3} />
+              <FoodImage
+                name={opt.img}
+                className="h-24 w-full sm:h-32"
+                rounded="rounded-none"
+              />
+              {on && (
+                <span className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-flame text-ink shadow-md">
+                  <Check className="h-4 w-4" aria-hidden />
                 </span>
               )}
+              <span className="space-y-1 p-3 sm:p-4">
+                <span className="block font-display text-base font-bold text-forest">
+                  {opt.label}
+                </span>
+                <span className="block text-xs leading-snug text-ink/75 sm:text-sm">
+                  {opt.blurb}
+                </span>
+              </span>
             </button>
           );
         })}
       </div>
 
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm font-medium text-destructive">
           {error}
         </p>
       )}
 
-      <Button
-        variant="cta"
-        size="lg"
+      <button
+        type="button"
         onClick={handleContinue}
         disabled={isPending}
-        className="w-full"
+        className="btn-flame w-full text-base disabled:opacity-60"
       >
         {isPending ? "Saving..." : "Continue"}
-      </Button>
+      </button>
     </div>
   );
 }

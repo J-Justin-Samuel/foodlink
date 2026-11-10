@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
+import { BadgeCheck, ShieldAlert, SearchX, Ban } from "lucide-react";
+import { GlassCard } from "@/components/glass/glass-card";
+import { Logo } from "@/components/glass/logo";
 import { verifySerial } from "@/lib/certificates";
 
 export const dynamic = "force-dynamic";
@@ -19,25 +21,36 @@ export default async function VerifyPage({
     h && /^[0-9a-f]{8,64}$/i.test(h) ? h : null,
   );
   const valid = result.status === "VALID";
+  const Icon = valid
+    ? BadgeCheck
+    : result.status === "NOT_FOUND"
+      ? SearchX
+      : result.status === "REVOKED"
+        ? Ban
+        : ShieldAlert;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-5 px-4 py-10">
-      <Link href="/" className="text-lg font-black tracking-tight">
-        FoodLink
-      </Link>
-      <div
+      <Logo />
+      <GlassCard
+        strong
         role="status"
-        className={`space-y-3 rounded-lg border-2 p-5 ${valid ? "border-green-600" : "border-destructive"}`}
+        className={`space-y-3 p-6 ring-2 ${valid ? "ring-fresh" : "ring-destructive/60"}`}
       >
+        <span
+          className={`grid h-14 w-14 place-items-center rounded-2xl ${valid ? "bg-fresh/15 text-forest" : "bg-red-100 text-destructive"}`}
+        >
+          <Icon className="h-8 w-8" aria-hidden />
+        </span>
         {result.status === "VALID" && (
           <>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-2xl font-extrabold">
               This {result.kind === "CERTIFICATE" ? "certificate" : "report"} is
               genuine.
             </h1>
             <p className="text-lg font-semibold">{result.name}</p>
-            <p className="text-sm text-muted-foreground">{result.summary}</p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-ink/75">{result.summary}</p>
+            <p className="text-sm text-ink/75">
               Issued{" "}
               {new Intl.DateTimeFormat("en-IN", {
                 dateStyle: "long",
@@ -49,10 +62,10 @@ export default async function VerifyPage({
         )}
         {result.status === "NOT_FOUND" && (
           <>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-2xl font-extrabold !text-destructive">
               We have no record of this document.
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-ink/75">
               Check the number {result.serial} against the printed document. It
               may have been copied wrongly or forged.
             </p>
@@ -60,10 +73,10 @@ export default async function VerifyPage({
         )}
         {result.status === "INVALID" && (
           <>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-2xl font-extrabold !text-destructive">
               This document does not match our records.
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-ink/75">
               The number exists, but the code or the details do not match. Treat
               the document as altered.
             </p>
@@ -71,16 +84,16 @@ export default async function VerifyPage({
         )}
         {result.status === "REVOKED" && (
           <>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-2xl font-extrabold !text-destructive">
               This certificate was withdrawn.
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-ink/75">
               FoodLink has cancelled certificate {result.serial}.
             </p>
           </>
         )}
-      </div>
-      <Link href="/" className={buttonVariants({ variant: "outline" })}>
+      </GlassCard>
+      <Link href="/" className="btn-glass self-start">
         Back to home
       </Link>
     </main>

@@ -3,11 +3,11 @@ import { STATUS_META, type FreshnessStatus } from "@/lib/freshness";
 type Tone = "green" | "amber" | "red" | "blue" | "gray";
 
 const TONE: Record<Tone, string> = {
-  green: "bg-green-100 text-green-900 dark:bg-green-900/40 dark:text-green-200",
-  amber: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200",
-  red: "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-200",
-  blue: "bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-200",
-  gray: "bg-muted text-muted-foreground",
+  green: "bg-fresh/15 text-forest ring-1 ring-fresh/40",
+  amber: "bg-peach text-[#9a3412] ring-1 ring-flame/30",
+  red: "bg-red-100 text-red-900 ring-1 ring-red-300",
+  blue: "bg-sky-100 text-sky-900 ring-1 ring-sky-300",
+  gray: "bg-mist text-ink/70 ring-1 ring-black/5",
 };
 
 export function Pill({
@@ -19,7 +19,7 @@ export function Pill({
 }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-sm px-2 py-0.5 text-xs font-semibold ${TONE[tone]}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONE[tone]}`}
     >
       {children}
     </span>
@@ -65,7 +65,7 @@ export function FreshnessBadge({
   const meta = STATUS_META[status as FreshnessStatus];
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-sm px-2 py-0.5 text-xs font-semibold ${meta.badgeClass}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${meta.badgeClass}`}
     >
       {meta.label}
       {typeof score === "number" ? ` · ${score}/100` : ""}

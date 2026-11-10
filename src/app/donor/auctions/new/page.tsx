@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { and, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { buttonVariants } from "@/components/ui/button";
 import { AuctionForm } from "@/components/shared/auction-form";
 import { db } from "@/db";
 import { donations, foodAuctions } from "@/db/schema";
@@ -25,8 +24,8 @@ export default async function NewAuctionPage({
     .from(donations)
     .where(and(eq(donations.id, donationId), eq(donations.donorId, user.id)));
   const back = (
-    <Link href="/donor" className={buttonVariants({ variant: "outline" })}>
-      Back to my donations
+    <Link href="/donor" className="btn-glass">
+      Back to donor home
     </Link>
   );
   const problem = async (): Promise<string | null> => {
@@ -48,13 +47,13 @@ export default async function NewAuctionPage({
   const payout = await getPayoutState(user.id);
 
   return (
-    <main className="mx-auto w-full max-w-xl space-y-5 px-4 py-8">
-      <h1 className="text-2xl font-bold">Sell this batch</h1>
+    <main className="mx-auto w-full max-w-xl space-y-5 px-4 pb-8 pt-4">
+      <h1 className="text-3xl font-extrabold">Sell this batch</h1>
       {why && (
         <>
           <p
             role="alert"
-            className="rounded-md border-2 border-destructive p-3 text-sm"
+            className="rounded-2xl bg-red-50 p-3 text-sm text-red-950 ring-1 ring-red-300"
           >
             {why}
           </p>
@@ -63,14 +62,14 @@ export default async function NewAuctionPage({
       )}
       {!why && payout.state !== "READY" && (
         <>
-          <p className="rounded-md border-2 p-3 text-sm">
+          <p className="glass rounded-2xl p-3 text-sm">
             {payout.state === "OFF"
               ? "Payments aren't set up on this server yet, so auctions can't start."
               : "Before you can sell, set up where the money should go."}
           </p>
           <div className="flex flex-wrap gap-2">
             {payout.state !== "OFF" && (
-              <Link href="/donor/payouts" className={buttonVariants()}>
+              <Link href="/donor/payouts" className="btn-flame">
                 Set up payouts
               </Link>
             )}
@@ -79,13 +78,15 @@ export default async function NewAuctionPage({
         </>
       )}
       {!why && payout.state === "READY" && d && (
-        <AuctionForm
-          donationId={d.id}
-          title={d.title}
-          quantityKg={Number(d.quantityKg)}
-          expiresAtMs={d.shelfLifeExpiresAt.getTime()}
-          nowMs={Date.now()}
-        />
+        <div className="glass-strong rounded-3xl p-5">
+          <AuctionForm
+            donationId={d.id}
+            title={d.title}
+            quantityKg={Number(d.quantityKg)}
+            expiresAtMs={d.shelfLifeExpiresAt.getTime()}
+            nowMs={Date.now()}
+          />
+        </div>
       )}
     </main>
   );

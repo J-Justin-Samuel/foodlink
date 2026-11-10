@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { and, eq, inArray, or } from "drizzle-orm";
-import { buttonVariants } from "@/components/ui/button";
 import { ReportButton } from "@/components/shared/report-button";
 import { db } from "@/db";
 import { esgReports } from "@/db/schema";
@@ -41,16 +40,36 @@ export default async function DonorImpactPage() {
   ]);
   const byKey = new Map(reports.map((r) => [`${r.year}-${r.quarter}`, r]));
   const tiles = [
-    { v: n(all.foodKg, 1), l: "kg of food rescued" },
-    { v: n(all.meals), l: "meals" },
-    { v: n(all.co2eKg, 1), l: "kg CO2e diverted" },
-    { v: n(all.waterL), l: "litres of water conserved" },
+    {
+      v: n(all.foodKg, 1),
+      l: "kg of food rescued",
+      e: "🥗",
+      tone: "bg-gradient-to-br from-peach to-white",
+    },
+    {
+      v: n(all.meals),
+      l: "meals",
+      e: "🍽️",
+      tone: "bg-gradient-to-br from-peach to-white",
+    },
+    {
+      v: n(all.co2eKg, 1),
+      l: "kg CO2e diverted",
+      e: "🌍",
+      tone: "bg-gradient-to-br from-fresh/20 to-white",
+    },
+    {
+      v: n(all.waterL),
+      l: "litres of water conserved",
+      e: "💧",
+      tone: "bg-gradient-to-br from-fresh/20 to-white",
+    },
   ];
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-8 px-4 py-8">
+    <main className="mx-auto w-full max-w-3xl space-y-7 px-4 pb-8 pt-4">
       <div>
-        <h1 className="text-2xl font-bold">Your impact</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-3xl font-extrabold sm:text-4xl">Your impact</h1>
+        <p className="text-sm text-ink/70">
           Counted from deliveries that reached an NGO. {n(all.deliveries)} so
           far. {quarterLabel(cur)} to date: {n(thisQ.foodKg, 1)} kg,{" "}
           {n(thisQ.meals)} meals.
@@ -58,27 +77,38 @@ export default async function DonorImpactPage() {
       </div>
       <ul className="grid gap-4 sm:grid-cols-2">
         {tiles.map((t) => (
-          <li key={t.l} className="rounded-lg border-2 border-foreground p-4">
-            <p className="text-3xl font-bold">{t.v}</p>
-            <p className="text-sm">{t.l}</p>
+          <li
+            key={t.l}
+            className={`lift relative overflow-hidden rounded-3xl p-5 ring-1 ring-black/5 ${t.tone}`}
+          >
+            <span
+              aria-hidden
+              className="absolute right-4 top-3 text-4xl opacity-90"
+            >
+              {t.e}
+            </span>
+            <p className="font-display text-4xl font-extrabold text-forest">
+              {t.v}
+            </p>
+            <p className="text-sm font-medium text-ink/75">{t.l}</p>
           </li>
         ))}
       </ul>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-ink/70">
         Each kg of food counts as 2.5 kg CO2e diverted and 1,200 litres of water
         conserved. One meal is 0.4 kg.
       </p>
 
       <section className="space-y-3" aria-labelledby="rep-h">
-        <h2 id="rep-h" className="font-semibold">
+        <h2 id="rep-h" className="text-xl font-bold">
           Quarterly CSR and donation reports
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-ink/70">
           A signed PDF for each finished quarter: impact totals plus a record of
           every donation and who received it. It is a donation record for your
           accountant. It is not tax advice and carries no money value.
         </p>
-        <ul className="divide-y rounded-lg border-2 border-foreground">
+        <ul className="glass-strong divide-y divide-black/5 overflow-hidden rounded-3xl">
           {past.map((q, idx) => {
             const imp = pastImpact[idx];
             const r = byKey.get(`${q.year}-${q.quarter}`);
@@ -89,7 +119,7 @@ export default async function DonorImpactPage() {
               >
                 <span>
                   <span className="font-semibold">{quarterLabel(q)}</span>
-                  <span className="block text-muted-foreground">
+                  <span className="block text-ink/70">
                     {imp.deliveries === 0
                       ? "No deliveries"
                       : `${imp.deliveries} deliveries · ${n(imp.foodKg, 1)} kg · ${n(imp.meals)} meals`}
@@ -99,7 +129,7 @@ export default async function DonorImpactPage() {
                   <a
                     href={`/api/reports/${r.id}/pdf`}
                     download
-                    className={buttonVariants()}
+                    className="btn-flame btn-sm"
                   >
                     Download PDF
                   </a>
@@ -115,7 +145,7 @@ export default async function DonorImpactPage() {
           })}
         </ul>
       </section>
-      <Link href="/donor" className={buttonVariants({ variant: "outline" })}>
+      <Link href="/donor" className="btn-glass">
         Back to donor home
       </Link>
     </main>

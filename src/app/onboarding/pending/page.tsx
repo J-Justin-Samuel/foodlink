@@ -1,33 +1,20 @@
-import Link from "next/link";
-import { Clock, MailCheck } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { Hourglass } from "lucide-react";
+import { GlassCard } from "@/components/glass/glass-card";
 
 export default function OnboardingPendingPage() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center px-4 text-center">
-      <div className="glass-strong w-full space-y-4 rounded-[2rem] p-8">
-        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-orange-soft ring-8 ring-orange-soft/50">
-          <Clock className="h-8 w-8 text-orange-vibrant" />
+    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-4">
+      <GlassCard strong className="space-y-3 p-8 text-center">
+        <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-peach text-flame">
+          <Hourglass className="h-7 w-7" aria-hidden />
         </span>
-        <h1 className="text-2xl font-bold text-forest">Details submitted</h1>
-        <p className="text-sm leading-relaxed text-charcoal/75">
-          We're checking your license and address. This usually takes under 24
-          hours.
+        <h1 className="text-2xl font-extrabold">Details submitted</h1>
+        <p className="text-sm text-ink/75">
+          Our team is verifying your licence and address. This usually takes
+          under 24 hours. You&apos;ll get an email once your account is approved
+          and your dashboard unlocks.
         </p>
-        <p className="flex items-center justify-center gap-2 rounded-2xl bg-fresh/10 px-3 py-2 text-sm font-medium text-forest">
-          <MailCheck className="h-4 w-4 text-fresh" />
-          You'll get an email when your dashboard unlocks.
-        </p>
-        <Link
-          href="/"
-          className={buttonVariants({
-            variant: "outline",
-            className: "w-full",
-          })}
-        >
-          Back to home
-        </Link>
-      </div>
+      </GlassCard>
     </main>
   );
 }
